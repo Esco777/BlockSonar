@@ -52,6 +52,8 @@ For Docker Compose, export the same public build variables and run `docker compo
 
 For a Render Docker web service, the default image uses the existing Sepolia deployment. On startup, missing membership address and chain settings come from the build, and the allowed origin defaults to the service’s `onrender.com` URL. Set `MEMBERSHIP_APP_ORIGINS` when using a custom domain. Sepolia defaults to a public RPC unless you configure `MEMBERSHIP_RPC_URL` or `ALCHEMY_API_KEY`.
 
+For DEX Intell on Render, set `DEX_DATABASE_URL` to your hosted PostgreSQL connection string and configure `ALCHEMY_API_KEY` with Ethereum Mainnet access or set `DEX_ETHEREUM_RPC_URL`. With both connections configured, the app defaults to the two Ethereum USDC/WETH pools and starts at block `26416294` when both `DEX_ETHEREUM_POOLS` and `DEX_ETHEREUM_START_BLOCK` are unset. For Sonar live market data, set `COINGECKO_DEMO_API_KEY` or `COINGECKO_PRO_API_KEY` for your plan.
+
 ### Sepolia test deployment
 
 Configure a funded Sepolia deployer, owner, and ETH/USD feed in the ignored `.env`. [Environment example](.env.membership.example)
