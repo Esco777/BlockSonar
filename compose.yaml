@@ -10,6 +10,12 @@ services:
     environment:
       PORT: "4001"
       HOST: "0.0.0.0"
+      MEMBERSHIP_CONTRACT_ADDRESS: ${MEMBERSHIP_CONTRACT_ADDRESS:-${VITE_MEMBERSHIP_CONTRACT_ADDRESS}}
+      MEMBERSHIP_CHAIN_ID: ${MEMBERSHIP_CHAIN_ID:-${VITE_MEMBERSHIP_CHAIN_ID}}
+      MEMBERSHIP_APP_ORIGINS: ${MEMBERSHIP_APP_ORIGINS:?Set the exact HTTPS website origin}
+      MEMBERSHIP_RPC_URL: ${MEMBERSHIP_RPC_URL:-}
+      ALCHEMY_API_KEY: ${ALCHEMY_API_KEY:-}
+      DEX_DATABASE_URL: ${DEX_DATABASE_URL:-}
     volumes:
       - narrative-data:/app/data
       - backup-data:/app/backups

@@ -25,7 +25,7 @@ Configuration
 - MEMBERSHIP_APP_ORIGINS: comma-separated exact website origins. Production requires explicitly configured HTTPS origins, for example https://app.example.com. Development allows localhost/127.0.0.1 ports 3000, 4001, 5173 and 5174.
 - NODE_ENV=production: enables Secure cookies and rejects local test-chain membership configuration. The deployment's RPC chain, bytecode and PRICE_USD constant are verified by the backend.
 
-The local deployment helper now updates both frontend and backend membership configuration; restart both processes after a redeployment. Production builds also validate matching backend/frontend contracts, RPC availability configuration and exact HTTPS origins before packaging.
+The local deployment helper now updates both frontend and backend membership configuration; restart both processes after a redeployment. Production builds require the public frontend contract and chain. Production startup checks the backend deployment against the built frontend and validates the RPC settings and HTTPS origins.
 
 The local server has been matched to the existing local frontend contract. Production still requires a public-chain deployment, matching server/frontend configuration, HTTPS and the approved app origin. Do not deploy the local test contract as a production membership source.
 

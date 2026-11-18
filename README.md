@@ -40,7 +40,7 @@ PostgreSQL keeps saved swaps on disk. Start it again after a reboot or after sto
 
 ## Production
 
-Use a persistent Node.js 22 service. Configure `VITE_MEMBERSHIP_CONTRACT_ADDRESS` and `VITE_MEMBERSHIP_CHAIN_ID` for an already deployed public-chain contract. Set server-side membership variables separately and keep private keys out of frontend configuration. [Membership access](docs/membership-access.md) · [Environment example](.env.membership.example)
+Use a persistent Node.js 22 service. Configure `VITE_MEMBERSHIP_CONTRACT_ADDRESS` and `VITE_MEMBERSHIP_CHAIN_ID` for an already deployed public-chain contract. Pass those two public values as build arguments for Docker. Configure `MEMBERSHIP_CONTRACT_ADDRESS`, `MEMBERSHIP_CHAIN_ID`, `MEMBERSHIP_APP_ORIGINS`, and `MEMBERSHIP_RPC_URL` as runtime variables. Keep RPC credentials out of Docker build arguments. [Membership access](docs/membership-access.md) · [Environment example](.env.membership.example)
 
 ```sh
 npm ci --include=dev
