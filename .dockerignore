@@ -1,0 +1,23 @@
+node_modules
+dist
+server/dist
+.git
+.env
+.env.*
+.aws
+.codex
+.agents
+deployments
+artifacts
+.hardhat-cache
+coverage
+*.tsbuildinfo
+*.log
+.DS_Store
+
+# Local narrative evidence, baselines, and alerts
+data/
+
+# Private backup archives and host-specific client binaries
+backups/
+.tools/

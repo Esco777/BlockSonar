@@ -1,0 +1,1 @@
+export type MarketSnapshot={global:{marketCap:number;volume:number;capChange:number|null;volumeChange:number|null;at:number}|null;breadth:{advancing:number;declining:number;unchanged:number;total:number;at:number}|null;sentiment:{value:number;label:string;at:number}|null;errors:string[];checkedAt:number}

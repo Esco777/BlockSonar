@@ -1,0 +1,29 @@
+node_modules/
+dist/
+server/dist/
+*.tsbuildinfo
+.DS_Store
+.env
+.env.*
+!.env.example
+!.env.membership.example
+!.env.dex.example
+artifacts/
+.hardhat-cache/
+coverage/
+
+# Local narrative evidence, baselines, and alerts
+data/
+
+# Local Solana builds and wallet/program signing material
+solana/target/
+solana/.anchor/
+*.keypair.json
+
+!.env.market.example
+
+# Private database backups
+backups/
+
+# Project-local PostgreSQL client tools
+.tools/

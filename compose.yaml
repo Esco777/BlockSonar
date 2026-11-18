@@ -1,0 +1,22 @@
+services:
+  blocksonar:
+    build:
+      context: .
+      args:
+        VITE_MEMBERSHIP_CONTRACT_ADDRESS: ${VITE_MEMBERSHIP_CONTRACT_ADDRESS:?Set the public membership contract address}
+        VITE_MEMBERSHIP_CHAIN_ID: ${VITE_MEMBERSHIP_CHAIN_ID:?Set the public membership chain ID}
+    ports:
+      - "127.0.0.1:4001:4001"
+    environment:
+      PORT: "4001"
+      HOST: "0.0.0.0"
+    volumes:
+      - narrative-data:/app/data
+      - backup-data:/app/backups
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 20s
+
+volumes:
+  narrative-data:
+  backup-data:
