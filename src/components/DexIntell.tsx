@@ -3,7 +3,7 @@ import { useDexPrices } from '../hooks/useDexPrices'
 import { estimateSwapUsd } from '../lib/swap-valuation'
 import { WalletHologramTarget } from './WalletHologram'
 import SwapHologram from './SwapHologram'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Activity, ArrowDownUp, Database, RefreshCw, ShieldCheck, Wallet } from 'lucide-react'
 import WalletTracker from './WalletTracker'
 import { dexChains, dexProtocols, type DexSnapshot } from '../lib/dex-intell'
@@ -23,9 +23,18 @@ export default function DexIntell() {
   const [coverage, setCoverage] = useState<CoverageResponse | null>(null)
   const [error, setError] = useState(''), [loading, setLoading] = useState(true)
   const [refresh, setRefresh] = useState(0), [stream, setStream] = useState('Connecting')
+  const [liveRefresh, setLiveRefresh] = useState(0)
+  const currentPage = useRef<{ query: string; offset: number; access: string } | null>(null)
+  const livePageRefresh = offset === 0 ? liveRefresh : 0
   useEffect(() => {
     const controller = new AbortController()
-    setLoading(true); setError(''); setSnapshot(null); setCoverage(null)
+    const previous = currentPage.current
+    if (!previous || previous.query !== query || previous.offset !== offset || previous.access !== access) {
+      setSnapshot(null)
+      setCoverage(null)
+    }
+    currentPage.current = { query, offset, access }
+    setLoading(true); setError('')
     const headers: Record<string, string> = access ? { Authorization: `Bearer ${access}` } : {}
     const get = async (path: string) => {
       const response = await fetch(path, { headers, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]) })
@@ -37,7 +46,7 @@ export default function DexIntell() {
       if (!controller.signal.aborted) { setSnapshot(swaps); setCoverage(status) }
     }).catch(e => { if (!controller.signal.aborted) setError(e.message) }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [query, offset, refresh, access])
+  }, [query, offset, refresh, livePageRefresh, access])
   useEffect(() => {
     const controller = new AbortController()
     let retry: ReturnType<typeof setTimeout> | undefined
@@ -55,7 +64,7 @@ export default function DexIntell() {
           let end: number
           while ((end = pending.indexOf('\n\n')) >= 0) {
             const event = pending.slice(0, end); pending = pending.slice(end + 2)
-            if (event.startsWith('event: refresh')) { if (!initial) setRefresh(n => n + 1); initial = false }
+            if (event.startsWith('event: refresh')) { if (!initial) setLiveRefresh(n => n + 1); initial = false }
           }
         }
       } catch { /* Reconnect without exposing authorization details. */ }
@@ -93,7 +102,7 @@ export default function DexIntell() {
       </form>
       <div className="dex-table-wrap"><table><thead><tr><th>Time / chain</th><th>DEX / pool</th><th>Swap direction</th><th>Amounts · raw integers</th><th>USD value / wallet</th><th>Transaction</th></tr></thead><tbody>{snapshot?.swaps.map(s => <tr key={`${s.chain}:${s.tx_hash}:${s.log_index}`}><td>{new Date(s.at).toLocaleString()}<small>{s.chain} · {s.finality}</small></td><td>{s.protocol}<small title={s.pool}>{short(s.pool)}</small></td><td><span title={s.token_in}>{short(s.token_in)}</span> → <span title={s.token_out}>{short(s.token_out)}</span></td><td><span>{s.amount_in} in</span><small>{s.amount_out} out</small></td><td>{s.usd_value != null ? `$${s.usd_value}` : estimateSwapUsd(s, quotes) ? <span className="dex-usd-estimate" title={`${estimateSwapUsd(s, quotes)!.source ? `${estimateSwapUsd(s, quotes)!.source} · ` : ''}Quote ${new Date(estimateSwapUsd(s, quotes)!.priceAt).toLocaleString()}; current value, not historical execution value`}>{new Intl.NumberFormat(undefined,{style:'currency',currency:'USD',maximumFractionDigits:2}).format(estimateSwapUsd(s, quotes)!.value)}<small>Current estimate</small></span> : 'USD unavailable'}<small>{s.wallet ? short(s.wallet) : 'Trader not attributed'}</small></td><td><a href={`${dexChains.find(c => c.key === s.chain)?.explorer ?? 'https://basescan.org'}/tx/${s.tx_hash}`} target="_blank" rel="noreferrer">{short(s.tx_hash)} ↗</a></td></tr>)}</tbody></table></div>
       {loading && <p className="dex-empty" role="status">Reading indexed history…</p>}{!loading && !snapshot?.swaps.length && <div className="dex-empty"><ArrowDownUp size={28} /><h3>{error ? 'Swap history unavailable' : 'No indexed swaps in this view'}</h3><p>{error ? 'Retry after the service is available.' : 'Trades will appear after the worker indexes matching pool events. An empty result does not establish zero trading activity.'}</p></div>}
-      <div className="dex-pagination"><button className="refresh-button" disabled={offset === 0 || loading} onClick={() => setOffset(Math.max(0, offset - 50))}>Previous</button><span>Page {Math.floor(offset / 50) + 1}</span><button className="refresh-button" disabled={snapshot?.nextOffset == null || loading} onClick={() => setOffset(snapshot!.nextOffset!)}>Next</button></div>
+      <div className="dex-pagination"><button className="refresh-button" disabled={offset === 0 || loading} onClick={() => setOffset(Math.max(0, offset - 50))}>Previous</button><span>Page {Math.floor(offset / 50) + 1}</span><button className="refresh-button" disabled={snapshot?.nextOffset == null || loading} onClick={() => setOffset(snapshot!.nextOffset!)}>Next</button>{offset > 0 && <button className="refresh-button" onClick={() => setOffset(0)}>Latest swaps</button>}</div>
       <p className="dex-footnote">{snapshot?.note ?? 'USD filters exclude unpriced swaps. Router senders are never labeled as traders. Token decimal metadata and price provenance are required before human-readable values can be calculated.'}</p>
     </section>}
     {tab === 'coverage' && <section className="dex-panel"><div className="dex-panel-heading"><div><h2>Historical data coverage</h2><p>Contiguous saved block ranges, reported separately for each configured pool.</p><p>Worker: {coverage?.workers?.[chain] ?? (coverage?.configured ? 'not configured' : 'database not configured')}</p></div></div>{loading && <p role="status">Loading coverage…</p>}{!loading && !activeCoverage.length && <p className="dex-empty">No completed indexed ranges for {chain}. Collection start and historical scores remain unavailable.</p>}{activeCoverage.map(c => <div className="dex-coverage" key={`${c.chain}:${c.pool}`}><strong>{c.pool}</strong><p>{c.chain === 'solana' ? 'Slots' : 'Blocks'} {c.start_block}–{c.end_block} · {c.chain === 'solana' ? 'collection observation time' : 'first block time'} {new Date(c.started_at).toLocaleString()}</p><p>{c.scope}</p><small>Last saved {new Date(c.updated_at).toLocaleString()}</small></div>)}{coverage?.jobs.filter(j => j.chain === chain).map(j => <div className="dex-coverage" key={j.pool}><strong>{short(j.pool)} · {j.status}</strong>{j.last_error && <p role="status">{j.last_error}</p>}<small>Updated {new Date(j.updated_at).toLocaleString()}</small></div>)}{coverage?.unclassified?.filter(u => u.chain === chain).map(u => <p className="dex-footnote" key={u.pool}>{u.count} unclassified swap events retained for {short(u.pool)}. Direction is not established; these are excluded from the swap feed.</p>)}<p className="dex-footnote">Coverage applies to configured pools only. Historical scores, category momentum, new pool discovery, and additional protocol adapters are pending. Existing coin analytics and narrative feeds retain their current sources.</p></section>}
