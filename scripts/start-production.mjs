@@ -11,6 +11,14 @@ try {
   process.exit(1)
 }
 const { address, chain } = deployment
+if (env.RENDER === 'true' && env.RENDER_EXTERNAL_URL) {
+  env.MEMBERSHIP_CONTRACT_ADDRESS ||= address
+  env.MEMBERSHIP_CHAIN_ID ||= String(chain)
+  env.MEMBERSHIP_APP_ORIGINS ||= env.RENDER_EXTERNAL_URL
+  if (chain === 11155111 && !env.ALCHEMY_API_KEY) {
+    env.MEMBERSHIP_RPC_URL ||= 'https://ethereum-sepolia.publicnode.com'
+  }
+}
 const serverAddress = env.MEMBERSHIP_CONTRACT_ADDRESS
 const serverChain = Number(env.MEMBERSHIP_CHAIN_ID)
 if (!serverAddress || serverAddress.toLowerCase() !== address.toLowerCase() || serverChain !== chain) {

@@ -50,6 +50,8 @@ npm start
 
 For Docker Compose, export the same public build variables and run `docker compose up --build -d`. Use `docker compose logs -f` to follow logs. For HTTPS reverse proxies, disable buffering for `/api/liquidity/stream` and allow an idle timeout of at least 60 seconds.
 
+For a Render Docker web service, the default image uses the existing Sepolia deployment. On startup, missing membership address and chain settings come from the build, and the allowed origin defaults to the service’s `onrender.com` URL. Set `MEMBERSHIP_APP_ORIGINS` when using a custom domain. Sepolia defaults to a public RPC unless you configure `MEMBERSHIP_RPC_URL` or `ALCHEMY_API_KEY`.
+
 ### Sepolia test deployment
 
 Configure a funded Sepolia deployer, owner, and ETH/USD feed in the ignored `.env`. [Environment example](.env.membership.example)
