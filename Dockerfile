@@ -5,9 +5,12 @@ RUN npm ci
 COPY . .
 ARG VITE_MEMBERSHIP_CONTRACT_ADDRESS
 ARG VITE_MEMBERSHIP_CHAIN_ID
-ENV VITE_MEMBERSHIP_CONTRACT_ADDRESS=$VITE_MEMBERSHIP_CONTRACT_ADDRESS \
-    VITE_MEMBERSHIP_CHAIN_ID=$VITE_MEMBERSHIP_CHAIN_ID
-RUN npm run build:production
+# Default to the existing public Sepolia deployment when both arguments are empty.
+RUN if [ -z "$VITE_MEMBERSHIP_CONTRACT_ADDRESS" ] && [ -z "$VITE_MEMBERSHIP_CHAIN_ID" ]; then \
+      export VITE_MEMBERSHIP_CONTRACT_ADDRESS=0x0742126033F9697EFb7B434871E817Af3982F32D \
+        VITE_MEMBERSHIP_CHAIN_ID=11155111; \
+    fi; \
+    npm run build:production
 RUN npm prune --omit=dev
 
 FROM node:22-bookworm-slim AS runtime
