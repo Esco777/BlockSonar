@@ -54,6 +54,10 @@ For Docker Compose, export the same public build variables and run `docker compo
 
 Configure a funded Sepolia deployer, owner, and ETH/USD feed in the ignored `.env`. [Environment example](.env.membership.example)
 
+Set `SEPOLIA_RPC_URL` and `DEPLOYER_PRIVATE_KEY` for deployment. Set `MEMBERSHIP_TESTNET_ADDRESS` in `.env` to check an existing deployment.
+
+The [Solidity ABI](src/abis/BlockSonarMembership.json) is available as JSON.
+
 ```sh
 npm run contracts:deploy:sepolia
 export MEMBERSHIP_TESTNET_ADDRESS=0xYourNewAddress

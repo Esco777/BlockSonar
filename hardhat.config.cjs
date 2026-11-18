@@ -1,6 +1,7 @@
 require('dotenv').config()
 require('@nomicfoundation/hardhat-ethers')
 require('@nomicfoundation/hardhat-chai-matchers')
+const path = require('node:path')
 const { subtask } = require('hardhat/config')
 const { TASK_COMPILE_SOLIDITY_GET_SOLC_BUILD } = require('hardhat/builtin-tasks/task-names')
 
@@ -13,7 +14,13 @@ const privateKey = process.env.DEPLOYER_PRIVATE_KEY
 if (privateKey && !/^0x[0-9a-fA-F]{64}$/.test(privateKey)) throw new Error('DEPLOYER_PRIVATE_KEY must be a 0x-prefixed 32-byte key')
 module.exports = {
   solidity: { version: '0.8.26', settings: { optimizer: { enabled: true, runs: 200 }, evmVersion: 'paris' } },
-  paths: { sources: './contracts', tests: './contracts/test', cache: './.hardhat-cache', artifacts: './artifacts' },
+  paths: {
+    sources: './contracts',
+    tests: './contracts/test',
+    cache: './.hardhat-cache',
+    artifacts: './artifacts',
+    abis: path.join(__dirname, 'src', 'abis'),
+  },
   networks: {
     ...(process.env.ETHEREUM_RPC_URL ? { ethereum: { url: process.env.ETHEREUM_RPC_URL, chainId: 1, accounts: privateKey ? [privateKey] : [] } } : {}),
     ...(process.env.BNB_RPC_URL ? { bnb: { url: process.env.BNB_RPC_URL, chainId: 56, accounts: privateKey ? [privateKey] : [] } } : {}),
