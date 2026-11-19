@@ -56,6 +56,8 @@ For DEX Intell on Render, set `DEX_DATABASE_URL` to your hosted PostgreSQL conne
 
 ### Sepolia test deployment
 
+Discover uses CoinGecko for new pools on its supported mainnets, including when membership runs on Sepolia. Set `COINGECKO_DEMO_API_KEY` or `COINGECKO_PRO_API_KEY` in the Render web service environment. Discover falls back to GeckoTerminal if CoinGecko is unavailable.
+
 Configure a funded Sepolia deployer, owner, and ETH/USD feed in the ignored `.env`. [Environment example](.env.membership.example)
 
 Set `SEPOLIA_RPC_URL` and `DEPLOYER_PRIVATE_KEY` for deployment. Set `MEMBERSHIP_TESTNET_ADDRESS` in `.env` to check an existing deployment.

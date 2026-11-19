@@ -1,10 +1,9 @@
-import { AlchemyDexPrices } from './alchemy-dex-prices.js'
-import { AlchemyPools } from './alchemy-pools.js'
+import { coinGeckoConfig } from './coingecko-config.js'
 import { newestPoolNotifications } from '../src/lib/notifications.js'
 import { DefiLlama } from './defillama.js'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { fetchNewPools, type DiscoverNetwork, type DiscoveredPool } from '../src/lib/discover-markets.js'
+import { parseNewPools, type DiscoverNetwork, type DiscoveredPool } from '../src/lib/discover-markets.js'
 import { assetKey, deduplicatePools } from '../src/lib/token-identity.js'
 import { accumulationPatterns, earlyBuyers, type WalletActivity } from '../src/lib/wallet-intelligence.js'
 import { DexScreener, type DexEnrichment, type DexObservation } from './dex-screener.js'
@@ -21,8 +20,6 @@ export class IntelligenceService {
   private ready: Promise<void>
   private saving: Promise<void> = Promise.resolve()
   private cache = new ProviderCache()
-  private alchemyPoolPrices = new AlchemyDexPrices(process.env.ALCHEMY_API_KEY,this.cache)
-  private alchemyPools = new AlchemyPools(process.env.ALCHEMY_API_KEY,this.cache)
   private dex = new DexScreener(this.cache)
   private llama = new DefiLlama(this.cache)
   private pending = new Map<string, Promise<unknown>>()
@@ -48,17 +45,22 @@ export class IntelligenceService {
     this.saving = write
     return write
   }
-  private async discoveryPools(network:DiscoverNetwork,page:number):Promise<DiscoveredPool[]> {
-    try { return await this.alchemyPools.pools(network,page) }
-    catch (error) {
-      const notice=error instanceof Error && error.message.startsWith('Alchemy pool discovery unavailable') ? error.message : 'Alchemy pool discovery unavailable'
-      const data=await this.cache.get<any>(`https://api.geckoterminal.com/api/v2/networks/${network}/new_pools?include=base_token%2Cquote_token%2Cdex&page=${page}`,'gecko-discovery',24)
-      const pools=await fetchNewPools(network,page,new AbortController().signal,async()=>new Response(JSON.stringify(data)))
-      const tokens=[...new Set(pools.flatMap(pool=>pool.tokenAddress?[pool.tokenAddress]:[]))].slice(0,25)
-      let quotes:Array<{token:string;priceUsd:number|null}>=[]
-      try { if(tokens.length)quotes=(await this.alchemyPoolPrices.getQuotes(network==='eth'?'ethereum':network,tokens)).quotes } catch { /* Preserve separately attributed discovery values. */ }
-      return pools.map(pool=>{const quote=quotes.find(quote=>network==='solana'?quote.token===pool.tokenAddress:quote.token.toLowerCase()===pool.tokenAddress?.toLowerCase());return {...pool,source:'GeckoTerminal',observedAt:Date.now(),feedNotice:`${notice}. Showing GeckoTerminal discovery.`,...(quote?.priceUsd!=null?{price:quote.priceUsd,priceSource:'Alchemy' as const}:{})}})
+  private async discoveryPools(network: DiscoverNetwork, page: number): Promise<DiscoveredPool[]> {
+    const params = new URLSearchParams({ include: 'base_token,quote_token,dex', page: String(page) })
+    let pools: DiscoveredPool[]
+    let source: DiscoveredPool['source'] = 'CoinGecko'
+    try {
+      const { base, headers, configured } = coinGeckoConfig()
+      if (!configured) throw new Error('CoinGecko API key not configured')
+      const data = await this.cache.get<unknown>(`${base}/onchain/networks/${network}/new_pools?${params}`, 'coingecko-discovery', 24, 60000, { headers })
+      pools = parseNewPools(data, network)
+    } catch {
+      source = 'GeckoTerminal'
+      const data = await this.cache.get<unknown>(`https://api.geckoterminal.com/api/v2/networks/${network}/new_pools?${params}`, 'gecko-discovery', 24)
+      pools = parseNewPools(data, network)
     }
+    const observedAt = Date.now()
+    return pools.map(pool => ({ ...pool, source, observedAt }))
   }
   async pools(network: DiscoverNetwork, page: number) {
     await this.ready

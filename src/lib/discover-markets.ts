@@ -6,7 +6,7 @@ export const DISCOVER_NETWORKS = [
 ] as const
 export type DiscoverNetwork = typeof DISCOVER_NETWORKS[number]['id']
 export type DiscoveredPool = {
-  source?: 'Alchemy' | 'GeckoTerminal'; observedAt?: number; feedNotice?: string; priceSource?: 'Alchemy'
+  source?: 'Alchemy' | 'CoinGecko' | 'GeckoTerminal'; observedAt?: number; feedNotice?: string; priceSource?: 'Alchemy'
   dexData?: { url: string; price: number | null; marketCap: number | null; fdv: number | null; promotion: string; observation: { at: number; liquidity: number | null; volume: number | null; buys: number | null; sells: number | null }; liquidityDelta: number | null; volumeDelta: number | null } | null
   enrichmentError?: string
   id: string; network: DiscoverNetwork; address: string; name: string
@@ -59,8 +59,8 @@ export async function fetchNewPools(network: DiscoverNetwork, page: number, sign
 }
 
 export async function fetchEnrichedNewPools(network: DiscoverNetwork, page: number, signal: AbortSignal): Promise<DiscoveredPool[]> {
-  const response = await fetch(`/api/discovery/pools?network=${network}&page=${page}`, { signal: AbortSignal.any([signal, AbortSignal.timeout(20000)]) })
-  if (!response.ok) throw new Error('Alchemy pool feed unavailable; verify Trading API access on the server')
+  const response = await fetch(`/api/discovery/pools?network=${network}&page=${page}`, { signal: AbortSignal.any([signal, AbortSignal.timeout(35000)]) })
+  if (!response.ok) throw new Error('New pool feed unavailable · retrying on the next refresh')
   const pools = await response.json()
   if (!Array.isArray(pools)) throw new Error('Invalid discovery response')
   return pools

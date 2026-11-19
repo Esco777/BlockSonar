@@ -39,3 +39,41 @@ test('requests the selected chain and page and exposes rate-limit failures', asy
   assert.equal(rows[0].network, 'bsc')
   await assert.rejects(() => fetchNewPools('eth', 1, new AbortController().signal, async () => new Response('', { status: 429 })), /Rate limited/)
 })
+
+test('server discovery prefers CoinGecko and labels GeckoTerminal fallback', async (t) => {
+  const { IntelligenceService } = await import('./dist/server/intelligence-service.js')
+  const { mkdtemp, rm } = await import('node:fs/promises')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const directory = await mkdtemp(join(tmpdir(), 'pool-discovery-'))
+  t.after(() => rm(directory, { recursive: true, force: true }))
+  const previousProKey = process.env.COINGECKO_PRO_API_KEY
+  process.env.COINGECKO_PRO_API_KEY = 'fixture-pro-key'
+  t.after(() => {
+    if (previousProKey === undefined) delete process.env.COINGECKO_PRO_API_KEY
+    else process.env.COINGECKO_PRO_API_KEY = previousProKey
+  })
+
+  const requests = t.mock.method(globalThis, 'fetch', async (input) => {
+    const url = new URL(input)
+    if (url.hostname === 'pro-api.coingecko.com' && url.searchParams.get('page') === '2') {
+      return new Response(null, { status: 429 })
+    }
+    return Response.json(payload)
+  })
+  const service = new IntelligenceService(join(directory, 'intelligence.json'), null)
+  const [primary] = await service.pools('eth', 1)
+  const [fallback] = await service.pools('eth', 2)
+
+  assert.equal(primary.source, 'CoinGecko')
+  assert.equal(primary.price, .0000000123)
+  assert.equal(fallback.source, 'GeckoTerminal')
+  assert.equal(requests.mock.callCount(), 3)
+  const [primaryUrl, primaryOptions] = requests.mock.calls[0].arguments
+  assert.equal(new URL(primaryUrl).pathname, '/api/v3/onchain/networks/eth/new_pools')
+  assert.equal(new Headers(primaryOptions.headers).get('x-cg-pro-api-key'), 'fixture-pro-key')
+  const [fallbackUrl, fallbackOptions] = requests.mock.calls[2].arguments
+  assert.equal(new URL(fallbackUrl).hostname, 'api.geckoterminal.com')
+  assert.equal(new URL(fallbackUrl).searchParams.get('page'), '2')
+  assert.equal(new Headers(fallbackOptions.headers).get('x-cg-pro-api-key'), null)
+})

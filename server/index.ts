@@ -129,7 +129,7 @@ const server = createServer(async (req, res) => {
           data = await intelligence.token(mint)
         } else data = await intelligence.intelligence()
         res.end(JSON.stringify(data))
-      } catch (error) { res.writeHead(503); res.end(JSON.stringify({ error: error instanceof Error && error.message.startsWith('Alchemy pool discovery unavailable') ? error.message : 'Intelligence provider unavailable; retry on the next refresh' })) }
+      } catch { res.writeHead(503); res.end(JSON.stringify({ error: url.pathname === '/api/discovery/pools' ? 'New pool feed unavailable; retry on the next refresh' : 'Intelligence provider unavailable; retry on the next refresh' })) }
     })()
     return
   }

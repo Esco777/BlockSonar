@@ -1,11 +1,5 @@
-Liquidity pool API-key integration
+# New pool discovery
 
-Pool discovery attempts the Alchemy Trading API with the server-side ALCHEMY_API_KEY for Ethereum, Solana and BNB. The adapter validates network/address identity (including 32-byte EVM pool IDs), creation timestamps and numeric fields. Opaque pageKey pagination supports the existing first three UI pages. Requests use provider caching, budgets, backoff and timeouts; keys never reach the browser.
+Discovery and pool notifications use CoinGecko’s onchain new-pools endpoint for Ethereum, Solana and BNB Chain. The server uses the existing CoinGecko Demo or Pro configuration and keeps the API key private. When the key is missing or the request fails, the server uses public GeckoTerminal. Cards show which provider supplied the pool data, including USD prices.
 
-Live verification: the existing key is accepted by Alchemy Prices API but rejected by Trading API pool discovery with HTTP 401. Trading API is documented as private preview. Until access is available, the working GeckoTerminal discovery feed remains explicitly labeled and an access notice appears. Successful token quotes from Alchemy replace the corresponding pool base-token USD price and carry a separate Alchemy price label; unknown quotes retain discovery pricing without false attribution. Liquidity/volume are not falsely relabeled as Alchemy-derived.
-
-Once Trading API requests succeed, Alchemy-discovered pool rows supply the supported metrics without using public discovery or DEX Screener enrichment for those rows. The existing source fallback remains available during provider failures. Empty/missing metrics are not invented. Pool notification discovery uses the same path.
-
-Verification: all three networks returned 20 fallback pools; 14 Ethereum tokens received Alchemy USD quotes during the check. Twelve focused tests passed, both builds passed, and browser checks cover the working cards, source/access notices and responsive layout.
-
-Official endpoint: https://www.alchemy.com/docs/data/trading-api/endpoints/discovery/get-new-pools
+The server caches results by network and page for 60 seconds, coalesces concurrent requests and respects provider rate-limit backoff. The Discover page supports the first three pages and retries on its next automatic refresh.
