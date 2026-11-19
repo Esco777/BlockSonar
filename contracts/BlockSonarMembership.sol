@@ -54,9 +54,9 @@ contract BlockSonarMembership is ERC721, Ownable2Step, ReentrancyGuard {
     event MembershipSold(uint256 indexed tokenId, address indexed seller, address indexed buyer, uint256 price, address commissionRecipient, uint256 commission);
 
     constructor(
-        address initialOwner, 
-        address feed, 
-        uint256 maxPriceAge_, 
+        address initialOwner,
+        address feed,
+        uint256 maxPriceAge_,
         uint256 supply, string memory baseURI_)
 
         ERC721("BlockSonar Lifetime Membership", "SONAR")
@@ -86,7 +86,7 @@ contract BlockSonarMembership is ERC721, Ownable2Step, ReentrancyGuard {
     }
 
     //Native ETH or BNB needed for $200, rounded up to the nearest wei. The deployment must use the matching native/USD feed.
-    function mintPrice() 
+    function mintPrice()
         public view returns (uint256)
 
     {
@@ -114,6 +114,7 @@ contract BlockSonarMembership is ERC721, Ownable2Step, ReentrancyGuard {
 
     function listForSale(uint256 tokenId, uint256 price) external nonReentrant {
         if (ownerOf(tokenId) != msg.sender) revert NotTokenOwner();
+
         if (price == 0) revert InvalidSalePrice();
         salePrice[tokenId] = price;
         emit MembershipListed(tokenId, msg.sender, price);
@@ -121,6 +122,7 @@ contract BlockSonarMembership is ERC721, Ownable2Step, ReentrancyGuard {
 
     function cancelSale(uint256 tokenId) external nonReentrant {
         if (ownerOf(tokenId) != msg.sender) revert NotTokenOwner();
+
         if (salePrice[tokenId] == 0) revert NotForSale();
         delete salePrice[tokenId];
         emit MembershipListingCancelled(tokenId);
@@ -128,19 +130,25 @@ contract BlockSonarMembership is ERC721, Ownable2Step, ReentrancyGuard {
 
     // Commission applies to sales settled here. Ordinary ERC721 transfers remain available.
     function buyMembership(uint256 tokenId) external payable nonReentrant {
+
         uint256 price = salePrice[tokenId];
         if (price == 0) revert NotForSale();
+
         if (msg.value != price) revert IncorrectPayment(price, msg.value);
         address seller = ownerOf(tokenId);
+
         if (msg.sender == seller) revert InvalidRecipient();
         address commissionRecipient = owner();
+
         // Round down to whole wei; the seller receives the remainder.
         uint256 commission = Math.mulDiv(price, SALE_COMMISSION_PERCENT, 100);
 
         // _update clears the listing and moves membership before any callbacks.
         _safeTransfer(seller, msg.sender, tokenId);
+
         (bool sellerPaid,) = payable(seller).call{value: price - commission}("");
         if (!sellerPaid) revert SalePaymentFailed();
+
         if (commission != 0) {
             (bool ownerPaid,) = payable(commissionRecipient).call{value: commission}("");
             if (!ownerPaid) revert SalePaymentFailed();
@@ -170,17 +178,22 @@ contract BlockSonarMembership is ERC721, Ownable2Step, ReentrancyGuard {
 
     function withdraw(address payable recipient) external nonReentrant {
         if (msg.sender != deployer) revert OnlyDeployer(msg.sender);
+
         if (recipient == address(0)) revert InvalidRecipient();
         uint256 amount = address(this).balance;
+
         if (amount == 0) revert NoFunds();
         (bool success,) = recipient.call{value: amount}("");
+
         if (!success) revert WithdrawalFailed();
         emit FundsWithdrawn(recipient, amount);
     }
 
     function _issue(address member) private returns (uint256 tokenId) {
         if (member == address(0)) revert InvalidRecipient();
+
         if (membershipTokenOf[member] != 0) revert AlreadyMember(member);
+
         if (totalMinted == maxSupply) revert SoldOut();
         tokenId = ++totalMinted;
         _safeMint(member, tokenId);
@@ -189,17 +202,19 @@ contract BlockSonarMembership is ERC721, Ownable2Step, ReentrancyGuard {
 
     function _update(address to,
         uint256 tokenId,
-        address auth) internal override returns (address from) 
+        address auth) internal override returns (address from)
         {
         address previous = _ownerOf(tokenId);
         if (to != address(0) && to != previous && membershipTokenOf[to] != 0) revert AlreadyMember(to);
         from = super._update(to, tokenId, auth);
+
         if (salePrice[tokenId] != 0) {
             delete salePrice[tokenId];
             emit MembershipListingCancelled(tokenId);
         }
-        
+
         if (from != address(0)) delete membershipTokenOf[from];
+
         if (to != address(0)) membershipTokenOf[to] = tokenId;
     }
 
