@@ -11,6 +11,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 //A lifetime BlockSonar membership belongs to the current NFT holder.
 //No expiry, burn, blacklist, admin revocation, or upgrade mechanism.
 contract BlockSonarMembership is ERC721, Ownable2Step, ReentrancyGuard {
+
     uint256 public constant PRICE_USD = 200;
     uint256 public constant SALE_COMMISSION_PERCENT = 10;
     address public immutable deployer;
@@ -20,9 +21,12 @@ contract BlockSonarMembership is ERC721, Ownable2Step, ReentrancyGuard {
     uint256 public immutable maxSupply;
     uint256 public totalMinted;
     bool public mintingOpen;
+
     mapping(address => uint256) public membershipTokenOf;
+
     // Native-currency asking price in wei; zero means unlisted.
     mapping(uint256 => uint256) public salePrice;
+    
     string private baseTokenURI;
 
     error InvalidPriceFeed();
@@ -91,7 +95,9 @@ contract BlockSonarMembership is ERC721, Ownable2Step, ReentrancyGuard {
 
     {
         (uint80 roundId, int256 answer,, uint256 updatedAt, uint80 answeredInRound) = ethUsdFeed.latestRoundData();
+
         if (answer <= 0 || roundId == 0 || answeredInRound < roundId || updatedAt == 0 || updatedAt > block.timestamp) revert InvalidOraclePrice();
+
         if (block.timestamp - updatedAt > maxPriceAge) revert StaleOraclePrice();
         return Math.mulDiv(PRICE_USD * 1 ether, feedScale, uint256(answer), Math.Rounding.Ceil);
     }
@@ -203,7 +209,9 @@ contract BlockSonarMembership is ERC721, Ownable2Step, ReentrancyGuard {
     function _update(address to,
         uint256 tokenId,
         address auth) internal override returns (address from)
+
         {
+
         address previous = _ownerOf(tokenId);
         if (to != address(0) && to != previous && membershipTokenOf[to] != 0) revert AlreadyMember(to);
         from = super._update(to, tokenId, auth);
