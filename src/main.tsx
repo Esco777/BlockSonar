@@ -9,7 +9,9 @@ import './styles.css'
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ThemeAppearance />
-    <WalletProvider><Entry /></WalletProvider>
+    <WalletProvider>
+      <Entry />
+    </WalletProvider>
     <ClickPixels />
-  </React.StrictMode>,
+  </React.StrictMode>
 )
