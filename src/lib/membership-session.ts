@@ -10,6 +10,7 @@ export function endMembershipSession(){
 }
 export type MembershipSession={authenticated:true;network:MembershipNetwork;address:string;chainId:number;contractAddress:string;expiresAt:number}
 export async function membershipSession(signal?:AbortSignal):Promise<MembershipSession>{
+ await pendingLogout
  const response=await fetch('/api/auth/session',{credentials:'same-origin',cache:'no-store',signal})
  const data=await response.json()
  if(!response.ok)throw new Error(data.error||'Sign in with a membership wallet')

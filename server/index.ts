@@ -113,8 +113,8 @@ const server = createServer(async (req, res) => {
           data = await ethereumWallets.wallet(address)
         } else if (url.pathname === '/api/discovery/pools') {
           const network = url.searchParams.get('network') ?? 'solana', page = Number(url.searchParams.get('page') ?? 1)
-          if (!['eth', 'solana', 'bsc'].includes(network) || !Number.isInteger(page) || page < 1 || page > 3) { res.writeHead(400); res.end(JSON.stringify({ error: 'Invalid discovery chain or page' })); return }
-          data = await intelligence.pools(network as 'eth' | 'solana' | 'bsc', page)
+          if (!['eth', 'base', 'solana', 'bsc'].includes(network) || !Number.isInteger(page) || page < 1 || page > 3) { res.writeHead(400); res.end(JSON.stringify({ error: 'Invalid discovery chain or page' })); return }
+          data = await intelligence.pools(network as 'eth' | 'base' | 'solana' | 'bsc', page)
         } else if (url.pathname === '/api/wallet-tracker/valuation') {
           const address = url.searchParams.get('address') ?? ''
           if (!validAddress('solana', address)) { res.writeHead(400); res.end(JSON.stringify({ error: 'Invalid Solana address' })); return }

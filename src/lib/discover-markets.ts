@@ -1,6 +1,7 @@
 import { assetKey } from './token-identity.js'
 export const DISCOVER_NETWORKS = [
   { id: 'eth', name: 'Ethereum', short: 'ETH', explorer: 'https://etherscan.io/token/' },
+  { id: 'base', name: 'Base', short: 'BASE', explorer: 'https://basescan.org/token/' },
   { id: 'solana', name: 'Solana', short: 'SOL', explorer: 'https://solscan.io/token/' },
   { id: 'bsc', name: 'BNB Chain', short: 'BNB', explorer: 'https://bscscan.com/token/' },
 ] as const

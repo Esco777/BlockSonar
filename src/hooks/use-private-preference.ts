@@ -3,8 +3,9 @@ import { useWallet } from '../components/WalletProvider'
 import { PreferenceWriter, type SaveStatus } from '../lib/preference-writer'
 
 export function usePrivatePreference<T>(kind: string, initial: () => T) {
-  const { wallet, activeNetwork } = useWallet()
-  const owner = wallet ? `${activeNetwork}:${wallet.chainId}:${activeNetwork === 'solana' ? wallet.account : wallet.account.toLowerCase()}` : ''
+  const { membershipAccount, activeNetwork, networks } = useWallet()
+  const config = networks.find(network => network.id === activeNetwork)
+  const owner = membershipAccount && config ? `${activeNetwork}:${config.chainId}:${activeNetwork === 'solana' ? membershipAccount : membershipAccount.toLowerCase()}` : ''
   const [value, update] = useState(initial), [ready, setReady] = useState(false), [status, setStatus] = useState<SaveStatus>({ error: '', unsaved: false })
   const [reload, setReload] = useState(0)
   const writer = useRef<PreferenceWriter<T> | null>(null), currentValue = useRef(value)

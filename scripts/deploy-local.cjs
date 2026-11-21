@@ -17,7 +17,7 @@ async function main() {
   process.env.MEMBERSHIP_BASE_URI = process.env.LOCAL_MEMBERSHIP_BASE_URI || 'about:blank#'
   delete process.env.MEMBERSHIP_ETH_USD_FEED
   const { record } = await deployMembership({ openMinting: true })
-  if (hre.network.name === 'localhost') {
+  if (hre.network.name === 'localhost' && process.env.LOCAL_MEMBERSHIP_WRITE_ENV !== 'false') {
     const envPath = path.join(__dirname, '..', '.env.local')
     let existing = ''
     try { existing = await fs.readFile(envPath, 'utf8') } catch (error) { if (error.code !== 'ENOENT') throw error }

@@ -18,7 +18,7 @@ if (env.RENDER === 'true' && env.RENDER_EXTERNAL_URL) {
   if (chain === 11155111 && !env.ALCHEMY_API_KEY) {
     env.MEMBERSHIP_RPC_URL ||= 'https://ethereum-sepolia.publicnode.com'
   }
-  if (env.DEX_DATABASE_URL && (env.DEX_ETHEREUM_RPC_URL || env.ALCHEMY_API_KEY) &&
+  if (env.DEX_DATABASE_URL && (env.DEX_ETHEREUM_RPC_URL || env.ALCHEMY_API_KEY || env.DEX_ETHEREUM_FALLBACK_RPC_URL) &&
       !env.DEX_ETHEREUM_POOLS?.trim() && !env.DEX_ETHEREUM_START_BLOCK?.trim()) {
     env.DEX_ETHEREUM_POOLS = '0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc,0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640'
     env.DEX_ETHEREUM_START_BLOCK = '26416294'
@@ -39,6 +39,23 @@ if (!origins.length || origins.some(value => { try { const url = new URL(value);
 if (!env.MEMBERSHIP_RPC_URL && !(env.ALCHEMY_API_KEY && [1, 11155111].includes(chain))) {
   console.error('Set a server MEMBERSHIP_RPC_URL or an Alchemy key for the membership chain before starting production.')
   process.exit(1)
+}
+// Production RPCs must not point at a developer blockchain on the same machine.
+for (const [name, value] of Object.entries(env)) {
+  if (!value || !/^(?:(?:DEX_(?:BASE|ETHEREUM|BSC|SOLANA)(?:_FALLBACK)?)|MEMBERSHIP(?:_BNB|_SOLANA)?)_RPC_URL$/.test(name)) continue
+  let host
+  try {
+    const url = new URL(value)
+    if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Invalid RPC protocol')
+    host = url.hostname.toLowerCase().replace(/\.$/, '')
+  } catch {
+    console.error(`Invalid production RPC URL in ${name}.`)
+    process.exit(1)
+  }
+  if (host === 'localhost' || host.endsWith('.localhost') || /^127\./.test(host) || host.startsWith('[::ffff:7f') || ['0.0.0.0', '[::1]', '[::]'].includes(host)) {
+    console.error(`Remove the local blockchain RPC from production setting ${name}.`)
+    process.exit(1)
+  }
 }
 // Use the actual build configuration for the server's frontend consistency checks.
 env.VITE_MEMBERSHIP_CONTRACT_ADDRESS = address

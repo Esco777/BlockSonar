@@ -416,7 +416,7 @@ h1 { margin: 10px 0 5px; color: var(--tone-e7efeb, #e7efeb); font: 600 29px/1.16
 .discover-card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
 .discover-card time { font: 10px 'DM Mono', monospace; color: #9db3a4; }
 .discover-chain { padding: 5px 8px; border-radius: 4px; background: #263c31; color: #aee8c5; font: 10px 'DM Mono', monospace; }
-.discover-chain-eth { background: #262e44; color: #b6caff; }.discover-chain-solana { background: #2b2443; color: #c8adff; }.discover-chain-bsc { background: #3d351c; color: #e5cf78; }
+.discover-chain-base { background: #1d3261; color: #b6caff; }.discover-chain-eth { background: #262e44; color: #b6caff; }.discover-chain-solana { background: #2b2443; color: #c8adff; }.discover-chain-bsc { background: #3d351c; color: #e5cf78; }
 .discover-token { display: flex; gap: 10px; align-items: center; margin-bottom: 20px; }
 .discover-token img, .discover-token-placeholder { flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%; }
 .discover-token-placeholder { display: grid; place-items: center; background: #293e31; color: #c8e8d2; font-size: 12px; }

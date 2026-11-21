@@ -1,17 +1,21 @@
 import { SolanaDexRpc, SOLANA_MAINNET_GENESIS, validSolanaKey, decodeSolanaSwaps } from './solana-dex.js'
 import { DexStore } from './dex-store.js'
 
-export type SolanaDexConfig = { rpc: string; pools: string[]; start: number; pageSize: number; interval: number }
-export function solanaDexConfig(env: NodeJS.ProcessEnv): SolanaDexConfig | null {
-  if (!env.DEX_SOLANA_POOLS?.trim() && !env.DEX_SOLANA_RPC_URL?.trim() && !env.DEX_SOLANA_START_SLOT?.trim()) return null
+export type SolanaDexConfig = { rpc: string; fallbackRpc?: string; pools: string[]; start: number; pageSize: number; interval: number }
+export function solanaDexRpcUrl(env: NodeJS.ProcessEnv) {
   const key = env.ALCHEMY_API_KEY?.trim()
-  const rpc = env.DEX_SOLANA_RPC_URL?.trim() || (key ? `https://solana-mainnet.g.alchemy.com/v2/${encodeURIComponent(key)}` : '')
+  return env.DEX_SOLANA_RPC_URL?.trim() || (key ? `https://solana-mainnet.g.alchemy.com/v2/${encodeURIComponent(key)}` : env.DEX_SOLANA_FALLBACK_RPC_URL?.trim() || '')
+}
+export function solanaDexConfig(env: NodeJS.ProcessEnv): SolanaDexConfig | null {
+  if (!env.DEX_SOLANA_POOLS?.trim() && !env.DEX_SOLANA_RPC_URL?.trim() && !env.DEX_SOLANA_START_SLOT?.trim() && !env.DEX_SOLANA_FALLBACK_RPC_URL?.trim()) return null
+  const rpc = solanaDexRpcUrl(env)
   if (!rpc || !['https:', 'http:'].includes(new URL(rpc).protocol)) throw new Error('Set a valid Solana RPC URL or Alchemy key')
   const pools = [...new Set((env.DEX_SOLANA_POOLS ?? '').split(',').map(s => s.trim()).filter(Boolean))]
   if (!pools.length || pools.length > 10 || pools.some(p => !validSolanaKey(p))) throw new Error('Set 1–10 valid DEX_SOLANA_POOLS')
   const start = Number(env.DEX_SOLANA_START_SLOT), pageSize = Number(env.DEX_SOLANA_PAGE_SIZE ?? '10'), interval = Number(env.DEX_SOLANA_POLL_MS ?? '10000')
   if (!/^\d+$/.test(env.DEX_SOLANA_START_SLOT ?? '') || !Number.isSafeInteger(start) || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 50 || !Number.isInteger(interval) || interval < 1000 || interval > 300000) throw new Error('Invalid Solana start slot, page size or polling interval')
-  return { rpc, pools, start, pageSize, interval }
+  const fallbackRpc = env.DEX_SOLANA_FALLBACK_RPC_URL?.trim()
+  return { rpc, ...(fallbackRpc && fallbackRpc !== rpc ? { fallbackRpc } : {}), pools, start, pageSize, interval }
 }
 type SignatureRow = { signature: string; slot: number; blockTime: number | null; err: unknown; confirmationStatus: string }
 export class SolanaDexWorker {
@@ -20,7 +24,9 @@ export class SolanaDexWorker {
   private stopped = false
   private timer?: ReturnType<typeof setTimeout>
   private running?: Promise<void>
-  constructor(private store: DexStore, private config: SolanaDexConfig, private rpc = new SolanaDexRpc(config.rpc)) {}
+  constructor(private store: DexStore, private config: SolanaDexConfig, private rpc = new SolanaDexRpc(config.rpc, fetch, config.fallbackRpc ? {
+    url: config.fallbackRpc, identityMethod: 'getGenesisHash', identity: SOLANA_MAINNET_GENESIS,
+  } : undefined)) {}
   async batch(address: string) {
     if (await this.rpc.call('getGenesisHash', []) !== SOLANA_MAINNET_GENESIS) throw new Error('RPC must serve Solana mainnet')
     const pool = await this.rpc.solanaPool(address)

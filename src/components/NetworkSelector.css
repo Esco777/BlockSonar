@@ -1,0 +1,25 @@
+.network-selector { position: relative; flex: none; }
+.network-selector .network-trigger { display: flex; align-items: center; gap: 6px; min-height: 34px; padding: 6px 9px; color: var(--mint); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; font: inherit; font-size: 11px; white-space: nowrap; cursor: pointer; }
+.network-trigger:hover, .network-trigger[aria-expanded="true"] { border-color: var(--mint); }
+.network-symbol { width: 18px; height: 18px; border-radius: 50%; display: inline-grid; flex: none; place-items: center; font: bold 13px/1 system-ui, sans-serif; }
+.network-symbol-ethereum { color: #fff; background: #53608f; }
+.network-symbol-base { color: #fff; background: #0052ff; }
+.network-symbol-bsc { color: #f4bc26; background: #343024; }
+.network-symbol-solana { color: #58edc9; background: #35275c; }
+.network-options, .network-feedback { position: absolute; top: calc(100% + 8px); right: 0; width: 204px; max-width: calc(100vw - 24px); padding: 5px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 12px 35px #0006; z-index: 85; }
+.network-selector :is(.network-options, .network-feedback) button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px; border: 0; border-radius: 4px; background: transparent; color: var(--mint); text-align: left; font: inherit; font-size: 11px; cursor: pointer; }
+.network-selector .network-options button > span:nth-child(2) { flex: 1; }
+.network-selector :is(.network-options, .network-feedback) button:hover { background: var(--panel-soft); }
+.network-options p, .network-feedback > span { display: block; margin: 4px 0 0; border-top: 1px solid var(--line); padding: 8px; color: var(--muted); font-size: 11px; }
+.network-feedback { width: max-content; max-width: 215px; }
+.network-feedback > span { margin: 0; border: 0; }
+.join-header:has(.network-options, .network-feedback) { z-index: 3; }
+@media (max-width: 680px) {
+  .network-label { display: none; }
+  .network-selector .network-trigger { padding: 6px; }
+  .network-options, .network-feedback { position: fixed; top: 66px; right: 12px; }
+}
+@media (max-width: 380px) {
+  .join-header { gap: 6px; flex-wrap: wrap; padding-block: 8px; }
+  .join-header .network-options, .join-header .network-feedback { position: absolute; right: auto; left: 0; top: calc(100% + 6px); }
+}

@@ -2,13 +2,14 @@ import { adapterForProtocol, decodeProtocolSwap, swapAbi, type DexChain } from '
 import { DexRpc, hexBlock, type RawDexLog } from './dex-rpc.js'
 import { DexStore } from './dex-store.js'
 
-export type DexConfig = { chain?: DexChain; rpc: string; pools: string[]; start: bigint; batch: bigint; interval: number }
+export type DexConfig = { chain?: DexChain; rpc: string; fallbackRpc?: string; pools: string[]; start: bigint; batch: bigint; interval: number }
 export function dexConfig(env: NodeJS.ProcessEnv, chain: DexChain = 'base'): DexConfig | null {
   const prefix = chain === 'base' ? 'DEX_BASE' : chain === 'ethereum' ? 'DEX_ETHEREUM' : 'DEX_BSC'
-  if (chain !== 'base' && !env[`${prefix}_POOLS`]?.trim() && !env[`${prefix}_START_BLOCK`]?.trim() && !env[`${prefix}_RPC_URL`]?.trim()) return null
+  const fallbackRpc = env[`${prefix}_FALLBACK_RPC_URL`]?.trim()
+  if (chain !== 'base' && !env[`${prefix}_POOLS`]?.trim() && !env[`${prefix}_START_BLOCK`]?.trim() && !env[`${prefix}_RPC_URL`]?.trim() && !fallbackRpc) return null
   const network = chain === 'base' ? 'base-mainnet' : chain === 'ethereum' ? 'eth-mainnet' : 'bnb-mainnet'
   const apiKey = env.ALCHEMY_API_KEY?.trim()
-  const rpc = env[`${prefix}_RPC_URL`]?.trim() || (apiKey ? `https://${network}.g.alchemy.com/v2/${encodeURIComponent(apiKey)}` : '')
+  const rpc = env[`${prefix}_RPC_URL`]?.trim() || (apiKey ? `https://${network}.g.alchemy.com/v2/${encodeURIComponent(apiKey)}` : fallbackRpc ?? '')
   if (!rpc) return null
   const pools = [...new Set((env[`${prefix}_POOLS`] ?? '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean))]
   if (!pools.length || pools.length > 50 || pools.some(p => !/^0x[0-9a-f]{40}$/.test(p))) throw new Error(`Set 1–50 valid ${prefix}_POOLS`)
@@ -16,15 +17,18 @@ export function dexConfig(env: NodeJS.ProcessEnv, chain: DexChain = 'base'): Dex
   const alchemy = new URL(rpc).hostname === `${network}.g.alchemy.com`
   const batch = BigInt(env[`${prefix}_BATCH_BLOCKS`] ?? env.DEX_BATCH_BLOCKS ?? (alchemy ? '10' : '100')), interval = Number(env[`${prefix}_POLL_MS`] ?? env.DEX_POLL_MS ?? '10000')
   if (batch < 1n || batch > 2000n || !Number.isInteger(interval) || interval < 1000 || interval > 300000) throw new Error('Invalid DEX batch or polling interval')
-  return { chain, rpc, pools, start: BigInt(env[`${prefix}_START_BLOCK`]!), batch, interval }
+  return { chain, rpc, ...(fallbackRpc && fallbackRpc !== rpc ? { fallbackRpc } : {}), pools, start: BigInt(env[`${prefix}_START_BLOCK`]!), batch, interval }
 }
+const chainIds = { base: '0x2105', ethereum: '0x1', bsc: '0x38' } as const
 export class DexWorker {
   readonly health: { lastAttemptAt: number | null; lastSuccessAt: number | null; lastErrorAt: number | null } = { lastAttemptAt: null, lastSuccessAt: null, lastErrorAt: null }
   get chainName() { return this.chain }
   private stopped = false
   private timer?: ReturnType<typeof setTimeout>
   private running?: Promise<void>
-  constructor(private store: DexStore, private config: DexConfig, private rpc = new DexRpc(config.rpc)) {}
+  constructor(private store: DexStore, private config: DexConfig, private rpc = new DexRpc(config.rpc, fetch, config.fallbackRpc ? {
+    url: config.fallbackRpc, identityMethod: 'eth_chainId', identity: chainIds[config.chain ?? 'base'],
+  } : undefined)) {}
   private get chain(): DexChain {
     const chain = this.config.chain ?? 'base'
     if (chain !== 'base' && chain !== 'ethereum' && chain !== 'bsc') throw new Error('Unsupported indexing chain')
@@ -32,7 +36,7 @@ export class DexWorker {
   }
   async batch(pool: string) {
     const chainId = await this.rpc.call<string>('eth_chainId', [])
-    if (BigInt(chainId) !== (this.chain === 'base' ? 8453n : this.chain === 'ethereum' ? 1n : 56n)) throw new Error(`DEX RPC must serve ${this.chain} Mainnet`)
+    if (BigInt(chainId) !== BigInt(chainIds[this.chain])) throw new Error(`DEX RPC must serve ${this.chain} Mainnet`)
     const tokens = await this.rpc.verifyPool(pool, this.chain)
     const adapter = adapterForProtocol(tokens.protocol ?? `${this.chain}-uniswap-v3`)
     if (adapter.chain !== this.chain) throw new Error('Pool protocol belongs to another chain')

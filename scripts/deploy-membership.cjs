@@ -11,17 +11,38 @@ async function main({ openMinting = false } = {}) {
   const maxPriceAge = BigInt(process.env.MEMBERSHIP_MAX_PRICE_AGE_SECONDS)
   const supply = BigInt(process.env.MEMBERSHIP_MAX_SUPPLY)
   if (maxPriceAge <= 0n || supply <= 0n) throw new Error('Oracle maximum age and supply must be positive')
-  const [deployer] = await ethers.getSigners()
-  if (!deployer) throw new Error('No deployer configured for this network')
-  const networkId = (await ethers.provider.getNetwork()).chainId
+  const expectedChain = BigInt(network.config.chainId ?? 0)
+  if ([1n, 56n, 8453n].includes(expectedChain) && process.env.CONFIRM_MEMBERSHIP_MAINNET !== `${network.name}:${expectedChain}`) {
+    throw new Error(`Set CONFIRM_MEMBERSHIP_MAINNET=${network.name}:${expectedChain} to confirm this deployment`)
+  }
+  if (expectedChain !== 31337n && !process.env.DEPLOYER_PRIVATE_KEY) {
+    throw new Error('Set DEPLOYER_PRIVATE_KEY to configure a dedicated deployer for this network')
+  }
+  const networkId = await ethers.provider.send('eth_chainId', []).then(BigInt).catch(() => {
+    throw new Error('Could not verify the deployment RPC chain. Check the selected network RPC setting.')
+  })
+  if (networkId !== expectedChain) throw new Error('Deployment RPC chain does not match the selected Hardhat network')
   if (openMinting && networkId !== 31337n) throw new Error('Automatic mint activation is only allowed on the local Hardhat chain.')
-  if (![1n,11155111n,56n,97n,31337n].includes(networkId)) throw new Error('Unsupported membership deployment chain')
+  if (![1n,11155111n,56n,97n,8453n,31337n].includes(networkId)) throw new Error('Unsupported membership deployment chain')
+  const [deployer] = await ethers.getSigners()
+  if (!deployer) throw new Error('Set DEPLOYER_PRIVATE_KEY to configure a dedicated deployer for this network')
+  async function checkBalance(factory, args) {
+    const transaction = await factory.getDeployTransaction(...args)
+    const [gas, fees, balance] = await Promise.all([
+      deployer.estimateGas(transaction), ethers.provider.getFeeData(), ethers.provider.getBalance(await deployer.getAddress()),
+    ])
+    const fee = fees.maxFeePerGas ?? fees.gasPrice
+    if (fee == null || balance < gas * fee) throw new Error('Deployer balance is insufficient for the estimated deployment gas')
+  }
   const nativeCurrency = [56n,97n].includes(networkId) ? 'BNB' : 'ETH'
   const expectedFeed = `${nativeCurrency}/USD`
   let feedAddress = nativeCurrency === 'BNB' ? process.env.MEMBERSHIP_BNB_USD_FEED : process.env.MEMBERSHIP_ETH_USD_FEED
   let mockFeed = false
   if (!feedAddress && networkId === 31337n) {
-    const mock = await ethers.deployContract('MockEthUsdFeed', [8, 4000n * 10n ** 8n])
+    const factory = await ethers.getContractFactory('MockEthUsdFeed', deployer)
+    const args = [8, 4000n * 10n ** 8n]
+    await checkBalance(factory, args)
+    const mock = await factory.deploy(...args)
     await mock.waitForDeployment()
     feedAddress = await mock.getAddress()
     mockFeed = true
@@ -30,7 +51,10 @@ async function main({ openMinting = false } = {}) {
   if (!feedAddress || !ethers.isAddress(feedAddress) || await ethers.provider.getCode(feedAddress) === '0x') throw new Error('Set the matching MEMBERSHIP_ETH_USD_FEED or MEMBERSHIP_BNB_USD_FEED Chainlink proxy for this chain')
   const feed = new ethers.Contract(feedAddress, ['function description() view returns (string)', 'function decimals() view returns (uint8)'], ethers.provider)
   if ((await feed.description()).replace(/\s/g, '') !== expectedFeed || await feed.decimals() > 18n) throw new Error('The configured feed must match the network native currency / USD with at most 18 decimals')
-  const contract = await ethers.deployContract('BlockSonarMembership', [process.env.MEMBERSHIP_OWNER, feedAddress, maxPriceAge, supply, process.env.MEMBERSHIP_BASE_URI])
+  const factory = await ethers.getContractFactory('BlockSonarMembership', deployer)
+  const args = [process.env.MEMBERSHIP_OWNER, feedAddress, maxPriceAge, supply, process.env.MEMBERSHIP_BASE_URI]
+  await checkBalance(factory, args)
+  const contract = await factory.deploy(...args)
   await contract.waitForDeployment()
   const receipt = await contract.deploymentTransaction().wait(network.name === 'sepolia' ? 2 : 1)
   if (openMinting) await (await contract.setMintingOpen(true)).wait()

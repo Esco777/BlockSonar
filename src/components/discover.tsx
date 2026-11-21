@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ExternalLink, RefreshCw, Search, Sparkles } from 'lucide-react'
 import { DISCOVER_NETWORKS, fetchEnrichedNewPools, type DiscoverNetwork, type DiscoveredPool } from '../lib/discover-markets'
+import { analyticsNetworks, type AnalyticsNetwork } from '../lib/analytics-networks'
+import { useWallet } from './WalletProvider'
 import { formatCompact } from './market-data'
 
 type ChainState = { pools: DiscoveredPool[]; updatedAt: number | null; error: string | null; page: number; hasMore: boolean }
@@ -13,8 +15,12 @@ function ageLabel(createdAt: number, now: number) {
 
 export default function Discover() {
   const [intelligence, setIntelligence] = useState<any>(null)
-  const [chains, setChains] = useState<Record<DiscoverNetwork, ChainState>>({ eth: initialChain(), solana: initialChain(), bsc: initialChain() })
-  const [network, setNetwork] = useState<DiscoverNetwork | 'all'>('all')
+  const [chains, setChains] = useState<Record<DiscoverNetwork, ChainState>>({ eth: initialChain(), base: initialChain(), solana: initialChain(), bsc: initialChain() })
+  const { analyticsNetwork } = useWallet()
+  const [override, setOverride] = useState<{ selected: AnalyticsNetwork; filter: DiscoverNetwork | 'all' } | null>(null)
+  const network = override?.selected === analyticsNetwork ? override.filter : analyticsNetworks[analyticsNetwork].discovery
+  const setNetwork = (filter: DiscoverNetwork | 'all') => setOverride({ selected: analyticsNetwork, filter })
+  useEffect(() => { setOverride(null) }, [analyticsNetwork])
   const [search, setSearch] = useState('')
   const [ageHours, setAgeHours] = useState(48)
   const [sort, setSort] = useState<'newest' | 'liquidity' | 'volume'>('newest')
@@ -70,7 +76,7 @@ export default function Discover() {
   const canLoadMore = DISCOVER_NETWORKS.some((chain) => (network === 'all' || chain.id === network) && chains[chain.id].hasMore)
 
   return <div className="discover-page">
-    <header className="discover-header"><div><div className="section-kicker"><Sparkles size={14} /> DISCOVER NEW MARKETS</div><h1>Fresh pools. Early discovery.</h1><p>Recently created token liquidity pools across Ethereum, Solana, and BNB Chain.</p></div><button type="button" className="refresh-button" disabled={loading} onClick={() => { setLoadMore(false); setRefresh((value) => value + 1) }}><RefreshCw size={15} className={loading ? 'spinning' : ''} />{loading ? 'Scanning chains…' : 'Refresh'}</button></header>
+    <header className="discover-header"><div><div className="section-kicker"><Sparkles size={14} /> DISCOVER NEW MARKETS</div><h1>Fresh pools. Early discovery.</h1><p>Recently created liquidity pools across Ethereum, Base, Solana, and BNB Smart Chain.</p></div><button type="button" className="refresh-button" disabled={loading} onClick={() => { setLoadMore(false); setRefresh((value) => value + 1) }}><RefreshCw size={15} className={loading ? 'spinning' : ''} />{loading ? 'Scanning chains…' : 'Refresh'}</button></header>
     <div className="discover-chain-tabs" role="group" aria-label="Filter discovery chain"><button type="button" aria-pressed={network === 'all'} onClick={() => setNetwork('all')}>All chains <span>{pools.length}</span></button>{DISCOVER_NETWORKS.map((chain) => <button type="button" key={chain.id} aria-pressed={network === chain.id} onClick={() => setNetwork(chain.id)}>{chain.name} <span>{chains[chain.id].pools.length}</span></button>)}</div>
     <div className="discover-status-grid">{DISCOVER_NETWORKS.map((chain) => <div key={chain.id}><strong>{chain.short}</strong><span className={chains[chain.id].error ? 'negative' : chains[chain.id].updatedAt ? 'positive' : ''}>{chains[chain.id].error ?? (chains[chain.id].updatedAt ? `Updated ${new Date(chains[chain.id].updatedAt!).toLocaleTimeString()}` : 'Waiting for data')}</span></div>)}</div>
     <div className="discover-toolbar"><label className="discover-search"><Search size={15} /><input aria-label="Search new pools" placeholder="Search token, pair, or address" value={search} onChange={(e) => setSearch(e.target.value)} /></label><label>Pool age<select value={ageHours} onChange={(e) => setAgeHours(Number(e.target.value))}><option value={1}>Last hour</option><option value={6}>Last 6 hours</option><option value={24}>Last 24 hours</option><option value={48}>Last 48 hours</option></select></label><label>Sort<select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}><option value="newest">Newest first</option><option value="liquidity">Highest liquidity</option><option value="volume">Highest volume</option></select></label><span>{visible.length} pools</span></div>

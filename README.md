@@ -88,3 +88,30 @@ Use an empty PostgreSQL database for fresh history, or follow the [database migr
 - [DEX Intell](docs/dex-intell.md) · [Solana DEX](docs/solana-dex.md) · [Alchemy setup](docs/alchemy-setup.md)
 - [Early Narrative Radar](docs/EARLY_NARRATIVE_RADAR.md) · [Wallet intelligence](docs/wallet-intelligence.md) · [Notifications](docs/NOTIFICATIONS.md)
 - [Private lists, backups, and testnet walkthrough](docs/reliability-and-testnet.md)
+
+### Multi-chain selector on Render
+
+The header selector and wallet switching require no new frontend variables. Wallet-added EVM networks use public, keyless RPC URLs. Keep `ALCHEMY_API_KEY` and all private RPC URLs in Render's server environment.
+
+- DEX Intell uses the existing `DEX_DATABASE_URL` and indexing workers. Configure verified pools and start blocks with `DEX_BASE_POOLS` / `DEX_BASE_START_BLOCK`, `DEX_ETHEREUM_POOLS` / `DEX_ETHEREUM_START_BLOCK`, and `DEX_BSC_POOLS` / `DEX_BSC_START_BLOCK`. The Ethereum production default above still applies. For Solana, set `DEX_SOLANA_POOLS` and `DEX_SOLANA_START_SLOT`.
+- Workers use the chain's Alchemy endpoint by default. Explicit overrides are `DEX_BASE_RPC_URL`, `DEX_ETHEREUM_RPC_URL`, `DEX_BSC_RPC_URL`, and `DEX_SOLANA_RPC_URL`. Optional same-chain fallbacks use the corresponding `_FALLBACK_RPC_URL` variables, including an Infura endpoint where it serves the required chain and RPC methods.
+- The Solana wallet balance uses the same mainnet RPC settings, or an existing mainnet `MEMBERSHIP_SOLANA_RPC_URL` when DEX RPC settings are absent. Solana membership on a test cluster retains its existing checkout configuration.
+
+### Hardhat networks and deployments
+
+| Hardhat network | Chain ID | Development settings |
+| --- | --- | --- |
+| `hardhat` / `localhost` | 31337 | `LOCAL_RPC_URL` defaults to `http://127.0.0.1:8545` |
+| `sepolia` | 11155111 | `SEPOLIA_RPC_URL` |
+| `ethereum` | 1 | `ETHEREUM_RPC_URL` |
+| `base` | 8453 | `BASE_RPC_URL` |
+| `bnb` | 56 | `BNB_RPC_URL` |
+| `bnbTestnet` | 97 | `BNB_TESTNET_RPC_URL` |
+
+Use `npm run contracts:node` on loopback and `npm run contracts:deploy:local` in another terminal. Set `LOCAL_MEMBERSHIP_WRITE_ENV=false` to leave app settings alone. Hardhat's funded accounts are for local use only.
+
+For an Ethereum mainnet fork, set `HARDHAT_FORK_RPC_URL` to a private Ethereum archive RPC URL from Alchemy or Infura. Set `HARDHAT_FORK_BLOCK_NUMBER` to pin the snapshot, for example `21000000`. Run the same local node command, or run `npx hardhat test contracts/test/network-fork.cjs` to exercise deployed WETH on the in-process fork. Stop and restart the local node to reset the fork. Unset both variables and restart to return to a fresh local chain. The fork does not follow mainnet after initialization. [Hardhat fork documentation](https://v2.hardhat.org/hardhat-network/docs/guides/forking-other-networks)
+
+For public testnets and mainnets, use a dedicated `DEPLOYER_PRIVATE_KEY` in the deployment shell or a separate secret store. Run `npx hardhat run scripts/deploy-membership.cjs --network <network>` with `MEMBERSHIP_OWNER`, `MEMBERSHIP_MAX_PRICE_AGE_SECONDS`, `MEMBERSHIP_MAX_SUPPLY`, `MEMBERSHIP_BASE_URI`, and the correct chain’s `MEMBERSHIP_ETH_USD_FEED` or `MEMBERSHIP_BNB_USD_FEED`. Mainnet also requires `CONFIRM_MEMBERSHIP_MAINNET=ethereum:1`, `base:8453`, or `bnb:56`, matching the command. To verify the contract, submit the source or compiler standard JSON from `artifacts/build-info` to the target explorer. Use Solidity 0.8.26, optimizer enabled with 200 runs, Paris EVM, and the constructor values in the deployment JSON.
+
+Render uses the backend DEX and membership RPC settings documented above. Keep Hardhat fork URLs and deployer keys in your development or deployment environment. The homepage selector changes analytics only. Use **Connect Wallet**, the explicit switch action in the dropdown, or membership sign-in when a wallet action needs a particular chain.

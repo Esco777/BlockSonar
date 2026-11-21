@@ -10,16 +10,40 @@ export function decodeSwap(log: RawDexLog, token0: string, token1: string) {
 }
 export class DexRpc {
   private nextAt = 0
-  constructor(private url: string, private fetcher: typeof fetch = fetch) {
-    const parsed = new URL(url)
-    if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('DEX RPC requires HTTP(S)')
+  private verified = new Map<string, Promise<void>>()
+  constructor(private url: string, private fetcher: typeof fetch = fetch, private fallback?: { url: string; identityMethod: string; identity: string }) {
+    for (const endpoint of [url, ...(fallback ? [fallback.url] : [])]) {
+      if (!['http:', 'https:'].includes(new URL(endpoint).protocol)) throw new Error('DEX RPC requires HTTP(S)')
+    }
+  }
+  private async verifyEndpoint(url: string) {
+    if (!this.fallback) return
+    let check = this.verified.get(url)
+    if (!check) {
+      const { identityMethod, identity } = this.fallback
+      check = this.request<string>(url, identityMethod, []).then(actual => {
+        if (actual !== identity) throw new Error('DEX RPC endpoint serves a different chain')
+      }).catch(error => { this.verified.delete(url); throw error })
+      this.verified.set(url, check)
+    }
+    await check
   }
   async call<T = any>(method: string, params: unknown[]): Promise<T> {
     const delay = Math.max(0, this.nextAt - Date.now())
     this.nextAt = Date.now() + delay + 200
     if (delay) await new Promise(resolve => setTimeout(resolve, delay))
+    try {
+      await this.verifyEndpoint(this.url)
+      return await this.request<T>(this.url, method, params)
+    } catch (error) {
+      if (!this.fallback) throw error
+      await this.verifyEndpoint(this.fallback.url)
+      return this.request<T>(this.fallback.url, method, params)
+    }
+  }
+  private async request<T>(url: string, method: string, params: unknown[]): Promise<T> {
     // Never log the provider URL: it may contain credentials.
-    const response = await this.fetcher(this.url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    const response = await this.fetcher(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }), signal: AbortSignal.timeout(20000) })
     if (!response.ok) throw new Error(`DEX RPC HTTP ${response.status}`)
     const result = await response.json()

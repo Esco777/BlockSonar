@@ -1,7 +1,7 @@
 import {ProviderCache} from './provider-cache.js'
 import {assetKey,validAddress} from '../src/lib/token-identity.js'
 import type {DiscoverNetwork,DiscoveredPool} from '../src/lib/discover-markets.js'
-const networks={eth:'eth-mainnet',solana:'solana-mainnet',bsc:'bnb-mainnet'}
+const networks={eth:'eth-mainnet',base:'base-mainnet',solana:'solana-mainnet',bsc:'bnb-mainnet'}
 const number=(value:unknown)=>typeof value==='number'||typeof value==='string'&&value.trim()!==''?Number.isFinite(Number(value))&&Number(value)>=0?Number(value):null:null
 export function parseAlchemyPools(payload:any,network:DiscoverNetwork,now=Date.now()):DiscoveredPool[]{
  if(!Array.isArray(payload?.data))throw new Error('Invalid Alchemy pool response')

@@ -1,6 +1,13 @@
 import type {MembershipNetwork} from '../src/lib/membership-networks.js'
 import {Contract,FetchRequest,JsonRpcProvider,getAddress,hashMessage,isAddress,verifyMessage} from 'ethers'
+import {setTimeout as delay} from 'node:timers/promises'
 export type MembershipVerifier={network?:MembershipNetwork;cluster?:string;configured:boolean;chainId:number;contractAddress:string;hasAccess:(address:string)=>Promise<boolean>;validSignature:(address:string,message:string,signature:string)=>Promise<boolean>;close?:()=>void}
+function isTemporaryRpcFailure(error:unknown){
+ const failure=error as {code?:string;info?:{responseStatus?:string}}|null
+ if(!failure?.code)return false
+ if(['TIMEOUT','ECONNRESET','ECONNREFUSED','ETIMEDOUT','EAI_AGAIN','ENOTFOUND','EPIPE'].includes(failure.code))return true
+ return failure.code==='SERVER_ERROR'&&/^(429|5\d\d)\b/.test(failure.info?.responseStatus??'')
+}
 export function createMembershipVerifier(env:NodeJS.ProcessEnv):MembershipVerifier {
  const contractAddress=env.MEMBERSHIP_CONTRACT_ADDRESS||env.VITE_MEMBERSHIP_CONTRACT_ADDRESS||''
  const chainId=Number(env.MEMBERSHIP_CHAIN_ID||env.VITE_MEMBERSHIP_CHAIN_ID||0)
@@ -18,7 +25,14 @@ export function createMembershipVerifier(env:NodeJS.ProcessEnv):MembershipVerifi
   if(await contract.PRICE_USD()!==200n)throw new Error('Unexpected membership contract')
   return contract
  }
- return {network:'ethereum',configured,chainId,contractAddress:configured?getAddress(contractAddress):'',async hasAccess(address){return Boolean(await(await ready()).hasAccess(address))},async validSignature(address,message,signature){
+ const readAccess=async(address:string)=>Boolean(await(await ready()).hasAccess(address))
+ return {network:'ethereum',configured,chainId,contractAddress:configured?getAddress(contractAddress):'',async hasAccess(address){
+  try{return await readAccess(address)}catch(error){
+   if(!isTemporaryRpcFailure(error))throw error
+   await delay(250)
+   return readAccess(address)
+  }
+ },async validSignature(address,message,signature){
   try{if(getAddress(verifyMessage(message,signature))===getAddress(address))return true}catch{/* Contract wallets may use ERC-1271. */}
   await ready()
   if(await provider!.getCode(address)==='0x')return false

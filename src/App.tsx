@@ -2,6 +2,7 @@ import MarketSnapshot from './components/MarketSnapshot'
 import WalletMenu from './components/WalletMenu'
 import DexIntellIcon from './components/DexIntellIcon'
 import Notifications from './components/Notifications'
+import NetworkSelector from './components/NetworkSelector'
 import DexIntell from './components/DexIntell'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useWallet } from './components/WalletProvider'
@@ -129,7 +130,7 @@ function App({ onSignOut }: { onSignOut: () => void }) {
   const watchlist = watchlists.activeList?.assetIds ?? []
   const toggleWatch = watchlists.toggleAsset
   const [watchlistFocus, setWatchlistFocus] = useState(0)
-  const { wallet: connectedWallet, connectWallet: requestWalletConnection } = useWallet()
+  const { wallet: connectedWallet, connectWallet: requestWalletConnection, walletBusy } = useWallet()
   const [visibleBalanceAccount,setVisibleBalanceAccount]=useState<string|null>(null)
   const balanceVisible=!!connectedWallet&&visibleBalanceAccount===connectedWallet.account
   useEffect(()=>setVisibleBalanceAccount(null),[connectedWallet?.account])
@@ -362,7 +363,8 @@ function App({ onSignOut }: { onSignOut: () => void }) {
             <a className="join-topbar-link" href="#/join">Home page</a>
             <div className="search-container"><div className="search-box"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search assets..." aria-label="Search assets" /><kbd><Command size={11} /> K</kbd></div>{search && <div className="search-results">{filteredCoins.length ? filteredCoins.slice(0, 6).map((coin) => <button key={coin.id} onClick={() => { setActiveCoinId(coin.id); setReportCoinId(coin.id); setActiveNav('Report'); setSearch('') }}><img src={coin.image} alt="" /><span><strong>{coin.name}</strong><small>{coin.symbol}</small></span><ArrowRight size={13} /></button>) : <span className="search-empty">No matching assets</span>}</div>}</div>
             <Notifications liquidations={liquidations} candles={candles} liquidationTimeframeSeconds={(candleTimeframes.find(item=>item.value===candleTimeframe)?.minutes??5)*60} onOpenLiquidations={()=>{setLiquidationViewRequest(value=>value+1);setActiveNav('Liquidation / Heatmap');setReportCoinId(null);setMobileNavOpen(false)}} coins={coins} dataSource={dataSource} updatedAt={marketUpdatedAt} marketError={marketError} onNavigate={destination => { setActiveNav(destination); setReportCoinId(null); setMobileNavOpen(false) }} onOpenAsset={id => { setActiveCoinId(id); setReportCoinId(id); setActiveNav('Report') }} />
-            <WalletMenu wallet={connectedWallet} balanceVisible={balanceVisible} onToggleBalance={()=>setVisibleBalanceAccount(balanceVisible?null:connectedWallet?.account??null)} onConnect={connectWallet} onSignOut={onSignOut} />
+            <NetworkSelector />
+            <WalletMenu busy={walletBusy} wallet={connectedWallet} balanceVisible={balanceVisible} onToggleBalance={()=>setVisibleBalanceAccount(balanceVisible?null:connectedWallet?.account??null)} onConnect={connectWallet} onSignOut={onSignOut} />
           </div>
         </header>
 

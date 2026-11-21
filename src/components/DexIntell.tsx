@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Activity, ArrowDownUp, Database, RefreshCw, ShieldCheck, Wallet } from 'lucide-react'
 import WalletTracker from './WalletTracker'
 import { dexChains, dexProtocols, type DexSnapshot } from '../lib/dex-intell'
+import { useWallet } from './WalletProvider'
 import './DexIntell.css'
 
 const short = (value: string) => `${value.slice(0, 7)}…${value.slice(-5)}`
@@ -14,12 +15,19 @@ type CoverageResponse = { workers?: Record<string, string>; workerHealth?: Recor
 export default function DexIntell() {
   const [walletHologramTarget, setWalletHologramTarget] = useState<HTMLDivElement | null>(null)
   const [tab, setTab] = useState<'swaps' | 'coverage' | 'wallets'>('swaps')
-  const [chain, setChain] = useState('ethereum')
+  const { analyticsNetwork: chain, selectAnalyticsNetwork, walletBusy } = useWallet()
   const [token, setToken] = useState(''), [wallet, setWallet] = useState(''), [minimum, setMinimum] = useState('')
   const [protocol, setProtocol] = useState(''), [from, setFrom] = useState(''), [to, setTo] = useState('')
-  const [query, setQuery] = useState('chain=ethereum'), [offset, setOffset] = useState(0)
+  const [page, setPage] = useState({ chain, query: `chain=${chain}`, offset: 0 })
+  const { query, offset } = page.chain === chain ? page : { query: `chain=${chain}`, offset: 0 }
+  const setOffset = (offset: number) => setPage({ chain, query, offset })
+  useEffect(() => {
+    setPage({ chain, query: `chain=${chain}`, offset: 0 })
+    setToken(''); setWallet(''); setMinimum(''); setProtocol(''); setFrom(''); setTo('')
+  }, [chain])
   const [access, setAccess] = useState(''), [draftAccess, setDraftAccess] = useState('')
-  const [snapshot, setSnapshot] = useState<DexSnapshot | null>(null)
+  const [result, setSnapshot] = useState<{ query: string; offset: number; data: DexSnapshot } | null>(null)
+  const snapshot = result?.query === query && result.offset === offset ? result.data : null
   const [coverage, setCoverage] = useState<CoverageResponse | null>(null)
   const [error, setError] = useState(''), [loading, setLoading] = useState(true)
   const [refresh, setRefresh] = useState(0), [stream, setStream] = useState('Connecting')
@@ -43,7 +51,7 @@ export default function DexIntell() {
       return data
     }
     void Promise.all([get(`/api/dex/swaps?${query}&offset=${offset}`), get('/api/data/coverage')]).then(([swaps, status]) => {
-      if (!controller.signal.aborted) { setSnapshot(swaps); setCoverage(status) }
+      if (!controller.signal.aborted) { setSnapshot({ query, offset, data: swaps }); setCoverage(status) }
     }).catch(e => { if (!controller.signal.aborted) setError(e.message) }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
   }, [query, offset, refresh, livePageRefresh, access])
@@ -89,7 +97,7 @@ export default function DexIntell() {
     </div>
     <div className="dex-tabs" role="group" aria-label="DEX Intell view">{([{ id: 'swaps', label: 'DEX swaps', icon: ArrowDownUp }, { id: 'coverage', label: 'Data coverage', icon: Database }, { id: 'wallets', label: 'Wallet intelligence', icon: Wallet }] as const).map(t => <button key={t.id} aria-pressed={tab === t.id} onClick={() => setTab(t.id)}><t.icon size={15} />{t.label}</button>)}</div>
     {tab !== 'wallets' && <>
-      <div className="dex-chains" role="group" aria-label="Blockchain">{dexChains.map(c => <button key={c.key} aria-pressed={chain === c.key} onClick={() => { setChain(c.key); setQuery(new URLSearchParams({ chain: c.key }).toString()); setOffset(0); setToken(''); setWallet(''); setMinimum(''); setProtocol(''); setFrom(''); setTo('') }}>{c.name}<small>{String(c.status) === 'planned' ? 'Adapter pending' : c.key === 'solana' ? 'Orca / Raydium' : c.key !== 'base' ? 'V2 / V3 adapters' : 'V3 adapter'}</small></button>)}</div>
+      <div className="dex-chains" role="group" aria-label="Blockchain">{dexChains.map(c => <button key={c.key} aria-pressed={chain === c.key} disabled={walletBusy} onClick={() => { if (chain !== c.key) selectAnalyticsNetwork(c.key) }}>{c.name}<small>{String(c.status) === 'planned' ? 'Adapter pending' : c.key === 'solana' ? 'Orca / Raydium' : c.key !== 'base' ? 'V2 / V3 adapters' : 'V3 adapter'}</small></button>)}</div>
       <details className="dex-access"><summary>Restricted data access</summary><form onSubmit={e => { e.preventDefault(); setAccess(draftAccess); setDraftAccess('') }}><label>DEX access token<input type="password" autoComplete="off" value={draftAccess} onChange={e => setDraftAccess(e.target.value)} /></label><button className="refresh-button">Connect</button>{access && <button type="button" className="refresh-button" onClick={() => setAccess('')}>Clear token</button>}<small>Kept in memory for this page only. Production access requires server configuration.</small></form></details>
       {error && <p role="alert" className="dex-notice">{error}</p>}
       {snapshot && !snapshot.configured && <div className="dex-notice" role="status"><Database size={19} /><div><strong>Historical engine is not connected</strong><p>Configure PostgreSQL, a chain RPC endpoint, verified pool addresses, and a start block on the server to begin collecting. No sample trades or synthetic history are shown.</p></div></div>}
@@ -97,7 +105,7 @@ export default function DexIntell() {
     </>}
     {tab === 'swaps' && <section className="dex-panel">
       <div className="dex-panel-heading"><div><h2>Swap activity</h2><p>Finalized events from verified, configured pools.</p></div><span className="dex-tag">RAW RPC → OWN DATABASE</span></div>
-      <form className="dex-filters" onSubmit={e => { e.preventDefault(); const p = new URLSearchParams({ chain }); if (token.trim()) p.set('token', token.trim()); if (wallet.trim()) p.set('wallet', wallet.trim()); if (minimum) p.set('minUsd', minimum); if (protocol) p.set('dex', protocol); if (from) p.set('from', new Date(from).toISOString()); if (to) p.set('to', new Date(to).toISOString()); setQuery(p.toString()); setOffset(0) }}>
+      <form className="dex-filters" onSubmit={e => { e.preventDefault(); const p = new URLSearchParams({ chain }); if (token.trim()) p.set('token', token.trim()); if (wallet.trim()) p.set('wallet', wallet.trim()); if (minimum) p.set('minUsd', minimum); if (protocol) p.set('dex', protocol); if (from) p.set('from', new Date(from).toISOString()); if (to) p.set('to', new Date(to).toISOString()); setPage({ chain, query: p.toString(), offset: 0 }) }}>
         <label>Token address<input placeholder="All tokens" value={token} onChange={e => setToken(e.target.value)} /></label><label>Wallet address<input placeholder="All identifiable wallets" value={wallet} onChange={e => setWallet(e.target.value)} /></label><label>DEX<select value={protocol} onChange={e => setProtocol(e.target.value)}><option value="">All protocols</option>{dexProtocols.filter(d => d.chain === chain).map(d => <option key={d.id} value={d.id}>{d.label}</option>)}</select></label><label>Minimum USD<input type="number" min="0" step="any" placeholder="Any size" value={minimum} onChange={e => setMinimum(e.target.value)} /></label><label>From<input type="datetime-local" value={from} onChange={e => setFrom(e.target.value)} /></label><label>To<input type="datetime-local" value={to} onChange={e => setTo(e.target.value)} /></label><button className="refresh-button">Apply filters</button>
       </form>
       <div className="dex-table-wrap"><table><thead><tr><th>Time / chain</th><th>DEX / pool</th><th>Swap direction</th><th>Amounts · raw integers</th><th>USD value / wallet</th><th>Transaction</th></tr></thead><tbody>{snapshot?.swaps.map(s => <tr key={`${s.chain}:${s.tx_hash}:${s.log_index}`}><td>{new Date(s.at).toLocaleString()}<small>{s.chain} · {s.finality}</small></td><td>{s.protocol}<small title={s.pool}>{short(s.pool)}</small></td><td><span title={s.token_in}>{short(s.token_in)}</span> → <span title={s.token_out}>{short(s.token_out)}</span></td><td><span>{s.amount_in} in</span><small>{s.amount_out} out</small></td><td>{s.usd_value != null ? `$${s.usd_value}` : estimateSwapUsd(s, quotes) ? <span className="dex-usd-estimate" title={`${estimateSwapUsd(s, quotes)!.source ? `${estimateSwapUsd(s, quotes)!.source} · ` : ''}Quote ${new Date(estimateSwapUsd(s, quotes)!.priceAt).toLocaleString()}; current value, not historical execution value`}>{new Intl.NumberFormat(undefined,{style:'currency',currency:'USD',maximumFractionDigits:2}).format(estimateSwapUsd(s, quotes)!.value)}<small>Current estimate</small></span> : 'USD unavailable'}<small>{s.wallet ? short(s.wallet) : 'Trader not attributed'}</small></td><td><a href={`${dexChains.find(c => c.key === s.chain)?.explorer ?? 'https://basescan.org'}/tx/${s.tx_hash}`} target="_blank" rel="noreferrer">{short(s.tx_hash)} ↗</a></td></tr>)}</tbody></table></div>
