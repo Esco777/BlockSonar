@@ -15,10 +15,10 @@ export function useDexPrices(swaps: DexSwap[], access: string) {
       await Promise.all([...groups].flatMap(([chain, addresses]) => Array.from({length:Math.ceil(addresses.length / 2)}, (_, index) => (async () => {
         try {
           const params = new URLSearchParams({chain,tokens:addresses.slice(index * 2, index * 2 + 2).join(',')})
-          const response = await fetch(`/api/dex/prices?${params}`, {signal:AbortSignal.any([controller.signal,AbortSignal.timeout(10000)]),headers:access ? {Authorization:`Bearer ${access}`} : undefined})
+          const response = await fetch(`/api/dex/prices?${params}`, {signal:AbortSignal.any([controller.signal,AbortSignal.timeout(35000)]),headers:access ? {Authorization:`Bearer ${access}`} : undefined})
           if (!response.ok) return
           const data = await response.json()
-          for (const quote of data.quotes ?? []) results[quoteKey(chain, quote.token)] = {priceUsd:quote.priceUsd,priceAt:quote.priceAt,source:typeof data.source === 'string' ? data.source : undefined}
+          for (const quote of data.quotes ?? []) results[quoteKey(chain, quote.token)] = {priceUsd:quote.priceUsd,priceAt:quote.priceAt,source:typeof quote.source === 'string' ? quote.source : typeof data.source === 'string' ? data.source : undefined}
         } catch { /* Missing prices stay unavailable. */ }
       })())))
       if (!controller.signal.aborted) setQuotes(results)

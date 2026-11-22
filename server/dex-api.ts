@@ -1,4 +1,4 @@
-import { AlchemyDexPrices } from './alchemy-dex-prices.js'
+import { DexPriceQuotes } from './dex-price-quotes.js'
 import { validAddress } from '../src/lib/token-identity.js'
 import { SolanaDexWorker, solanaDexConfig } from './solana-dex-worker.js'
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -35,7 +35,7 @@ export function parseDexFilters(url: URL): SwapFilters {
   return filters
 }
 export class DexApi {
-  private prices: AlchemyDexPrices
+  private prices: DexPriceQuotes
   private store?: DexStore
   private workers: Array<DexWorker | SolanaDexWorker> = []
   private workerStatus: Record<string, string> = {}
@@ -44,7 +44,7 @@ export class DexApi {
   private stopped = false
   private windows = new Map<string, { until: number; count: number }>()
   private streams = new Set<ServerResponse>()
-  constructor(private env = process.env) { this.prices = new AlchemyDexPrices(env.ALCHEMY_API_KEY) }
+  constructor(private env = process.env) { this.prices = new DexPriceQuotes(env) }
   start() {
     if (!this.env.DEX_DATABASE_URL || this.store || this.stopped) return
     this.store = new DexStore(this.env.DEX_DATABASE_URL)
@@ -112,12 +112,12 @@ export class DexApi {
           const chain = filters.chain, tokens = url.searchParams.get('tokens')?.split(',') ?? []
           if (!chain || !tokens.length || tokens.length > 2 || tokens.some(token => !validAddress(chain, token))) { send(400, { error: 'Provide a supported chain and one or two token addresses' }); return }
           try { send(200, await this.prices.getQuotes(chain, tokens)) }
-          catch { send(503, { error: 'Alchemy USD pricing unavailable; verify the server API key and Prices API access' }) }
+          catch { send(503, { error: 'USD quote service unavailable' }) }
           return
         }
         await this.ready
         const configured = Boolean(this.store)
-        const note = 'Configured pools only: Base Uniswap V3; Ethereum Uniswap V2/V3; BNB PancakeSwap V2/V3; Solana Orca Whirlpool/Raydium CPMM. Amounts are raw token integers. Wallet attribution and USD pricing are unavailable. V4, other protocol adapters and historical scores are pending. Ambiguous V2 swaps are retained separately without direction.'
+        const note = 'Configured pools only: Base Uniswap V3; Ethereum Uniswap V2/V3; BNB PancakeSwap V2/V3; Solana Orca Whirlpool/Raydium CPMM. Amounts are raw token integers. Wallet attribution can be unavailable. Current USD estimates use provider quotes where available. V4, other protocol adapters and historical scores are pending. Ambiguous V2 swaps are retained separately without direction.'
         if (path === '/api/data/coverage') {
           send(200, { configured, workers: this.workerStatus, workerHealth: Object.fromEntries(this.workers.map(worker => [worker.chainName, worker.health])), coverage: await this.store?.coverage() ?? [], jobs: this.store ? (await this.store.db.query('SELECT * FROM backfill_jobs ORDER BY chain,pool')).rows : [], unclassified: this.store ? (await this.store.db.query('SELECT chain,pool,count(*)::text AS count FROM dex_unclassified_swaps GROUP BY chain,pool')).rows : [], note }); return
         }
