@@ -5,7 +5,7 @@ export class ProviderCache {
   private windows = new Map<string, { start: number; count: number; blocked: number }>()
   constructor(private fetcher: typeof fetch = fetch, private now = Date.now) {}
   async get<T>(url: string, group: string, limit: number, ttl = 60000, init?: RequestInit): Promise<T> {
-    const key = `${url}:${init?.body ?? ''}`
+    const key = JSON.stringify([group, url, init?.body ?? ''])
     const cached = this.cache.get(key)
     if (cached && this.now() - cached.at < ttl) return cached.value as T
     if (this.pending.has(key)) return this.pending.get(key)!
@@ -17,7 +17,9 @@ export class ProviderCache {
       if (budget.blocked > now || budget.count >= limit) throw new Error('Provider rate limited; retry after the next refresh')
       budget.count++
       let response: Response
-      try { response = await this.fetcher(url, { ...init, signal: AbortSignal.timeout(15000) }) }
+      const timeout = AbortSignal.timeout(15000)
+      const signal = init?.signal ? AbortSignal.any([timeout, init.signal]) : timeout
+      try { response = await this.fetcher(url, { ...init, signal }) }
       catch { throw new Error('Provider connection unavailable') }
       if (response.status === 429) {
         const retry = response.headers.get('retry-after')

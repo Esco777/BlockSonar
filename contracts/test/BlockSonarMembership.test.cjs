@@ -274,6 +274,26 @@ describe('BlockSonarMembership', function () {
 
   })
 
+  it('rejects a stale payment quote and accepts a retry at the updated price', async function () {
+    await open()
+    const originalQuote = await contract.mintPrice()
+    const { timestamp } = await ethers.provider.getBlock('latest')
+    await feed.setRound(2, 2000n * 10n ** 8n, timestamp, 2)
+
+    const updatedQuote = ethers.parseEther('0.1')
+    await expect(contract.connect(alice).mint({ value: originalQuote }))
+      .to.be.revertedWithCustomError(contract, 'IncorrectPayment')
+      .withArgs(updatedQuote, originalQuote)
+    expect(await contract.hasAccess(alice.address)).to.equal(false)
+    expect(await ethers.provider.getBalance(await contract.getAddress())).to.equal(0n)
+
+    await expect(contract.connect(alice).mint({ value: updatedQuote }))
+      .to.emit(contract, 'MembershipPurchased')
+      .withArgs(alice.address, 1n, updatedQuote)
+    expect(await contract.hasAccess(alice.address)).to.equal(true)
+    expect(await ethers.provider.getBalance(await contract.getAddress())).to.equal(updatedQuote)
+  })
+
   it('refunds excess ETH when the current quote is lower than the submitted amount', async function () {
     await open()
     await expect(contract.connect(alice).mint({ value: price * 2n })).to.changeEtherBalances([alice, owner, contract], [-price, 0n, price])

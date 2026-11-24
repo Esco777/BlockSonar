@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react'
 import { formatCompact } from './market-data'
-import type { MarketSnapshot as Snapshot } from '../lib/market-snapshot'
+import {
+  GLOBAL_MARKET_DELAY_MS,
+  GLOBAL_MARKET_MAX_AGE_MS,
+  GLOBAL_MARKET_REFRESH_MS,
+  type MarketSnapshot as Snapshot,
+} from '../lib/market-snapshot'
 export default function MarketSnapshot() {
   const [data, setData] = useState<Snapshot | null>(null),
     [failed, setFailed] = useState(false),
@@ -28,7 +33,6 @@ export default function MarketSnapshot() {
       } catch {
         if (active) {
           setFailed(true)
-          setData(null)
         }
       } finally {
         pending = false
@@ -38,18 +42,21 @@ export default function MarketSnapshot() {
     const timer = window.setInterval(() => {
       setClock(Date.now())
       void load()
-    }, 60000)
+    }, GLOBAL_MARKET_REFRESH_MS)
     return () => {
       active = false
       controller.abort()
       clearInterval(timer)
     }
   }, [])
-  const global = data?.global && clock - data.global.at <= 600000 ? data.global : null,
+  const global = data?.global && clock - data.global.at <= GLOBAL_MARKET_MAX_AGE_MS ? data.global : null,
     breadth = data?.breadth && clock - data.breadth.at <= 600000 ? data.breadth : null,
     sentiment = data?.sentiment && clock - data.sentiment.at <= 48 * 3600000 ? data.sentiment : null
   const unavailable = !data && !failed ? 'Loading…' : 'Unavailable'
   const date = (at: number) => new Date(at).toLocaleString()
+  const globalDelayed = global && (failed || clock - global.at > GLOBAL_MARKET_DELAY_MS || data?.errors.includes('Global market totals unavailable'))
+  const globalDetail = (value: number | null) =>
+    globalDelayed ? <small>Delayed · CoinGecko</small> : change(value)
   const change = (value: number | null | undefined) =>
     value == null ? (
       <small>24h change unavailable</small>
@@ -64,7 +71,8 @@ export default function MarketSnapshot() {
       <div className='strip-intro'>
         <span className='strip-label'>MARKET SNAPSHOT</span>
         <span className='strip-date'>{new Date(clock).toLocaleDateString()}</span>
-        <span className='strip-date'>Refreshes every minute</span>
+        <span className='strip-date'>Checks CoinGecko every {GLOBAL_MARKET_REFRESH_MS / 1000}s</span>
+        {global && <span className='strip-date'>Totals updated {new Date(global.at).toLocaleTimeString()}</span>}
       </div>
       <div
         className='market-metric'
@@ -74,7 +82,7 @@ export default function MarketSnapshot() {
       >
         <span>Total market cap</span>
         <strong>{global ? formatCompact(global.marketCap) : unavailable}</strong>
-        {global ? change(global.capChange) : <small>CoinGecko</small>}
+        {global ? globalDetail(global.capChange) : <small>CoinGecko</small>}
       </div>
       <div
         className='market-metric'
@@ -84,7 +92,7 @@ export default function MarketSnapshot() {
       >
         <span>24h volume</span>
         <strong>{global ? formatCompact(global.volume) : unavailable}</strong>
-        {global ? change(global.volumeChange) : <small>CoinGecko</small>}
+        {global ? globalDetail(global.volumeChange) : <small>CoinGecko</small>}
       </div>
       <div
         className='market-metric breadth-metric'
