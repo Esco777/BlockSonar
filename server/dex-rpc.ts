@@ -10,11 +10,17 @@ export class DexRpcError extends Error {
     super(status === undefined ? `DEX RPC ${method} failed` : `DEX RPC HTTP ${status}`)
   }
 }
+export function dexRpcFailure(error: unknown) {
+  if (error instanceof DexRpcError) {
+    return { reason: `rpc_${error.reason}`, method: error.method, httpStatus: error.status, rpcCode: error.rpcCode }
+  }
+}
 export function decodeSwap(log: RawDexLog, token0: string, token1: string) {
   return decodeProtocolSwap(adapterForProtocol('base-uniswap-v3'), log, token0, token1)!
 }
 export class DexRpc {
   private nextAt = 0
+  private retryAfter = new Map<string, number>()
   private verified = new Map<string, Promise<void>>()
   constructor(private url: string, private fetcher: typeof fetch = fetch, private fallback?: { url: string; identityMethod: string; identity: string }) {
     for (const endpoint of [url, ...(fallback ? [fallback.url] : [])]) {
@@ -47,10 +53,17 @@ export class DexRpc {
     }
   }
   private async request<T>(url: string, method: string, params: unknown[]): Promise<T> {
+    if ((this.retryAfter.get(url) ?? 0) > Date.now()) throw new DexRpcError(method, 'http', 429)
     // Never log the provider URL: it may contain credentials.
     const response = await this.fetcher(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }), signal: AbortSignal.timeout(20000) })
       .catch(() => { throw new DexRpcError(method, 'connection') })
+    if (response.status === 429) {
+      const header = response.headers.get('retry-after')
+      const now = Date.now()
+      const requestedDelay = header && /^\d+$/.test(header) ? Number(header) * 1000 : Date.parse(header ?? '') - now
+      this.retryAfter.set(url, now + (Number.isFinite(requestedDelay) ? Math.max(1000, requestedDelay) : 60_000))
+    }
     if (!response.ok) throw new DexRpcError(method, 'http', response.status)
     const result = await response.json().catch(() => { throw new DexRpcError(method, 'response') })
     if (result?.error || result?.result == null) {

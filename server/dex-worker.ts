@@ -1,8 +1,13 @@
 import { adapterForProtocol, decodeProtocolSwap, swapAbi, type DexChain } from './dex-adapters.js'
-import { DexRpc, DexRpcError, hexBlock, type RawDexLog } from './dex-rpc.js'
+import { DexRpc, dexRpcFailure, hexBlock, type RawDexLog } from './dex-rpc.js'
 import { DexStore } from './dex-store.js'
 
 export type DexConfig = { chain?: DexChain; rpc: string; fallbackRpc?: string; pools: string[]; start: bigint; batch: bigint; interval: number }
+export class DexConfigurationError extends Error {
+  constructor(readonly setting: string, message: string) {
+    super(message)
+  }
+}
 export function dexConfig(env: NodeJS.ProcessEnv, chain: DexChain = 'base'): DexConfig | null {
   const prefix = chain === 'base' ? 'DEX_BASE' : chain === 'ethereum' ? 'DEX_ETHEREUM' : 'DEX_BSC'
   const fallbackRpc = env[`${prefix}_FALLBACK_RPC_URL`]?.trim()
@@ -12,12 +17,34 @@ export function dexConfig(env: NodeJS.ProcessEnv, chain: DexChain = 'base'): Dex
   const rpc = env[`${prefix}_RPC_URL`]?.trim() || (apiKey ? `https://${network}.g.alchemy.com/v2/${encodeURIComponent(apiKey)}` : fallbackRpc ?? '')
   if (!rpc) return null
   const pools = [...new Set((env[`${prefix}_POOLS`] ?? '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean))]
-  if (!pools.length || pools.length > 50 || pools.some(p => !/^0x[0-9a-f]{40}$/.test(p))) throw new Error(`Set 1–50 valid ${prefix}_POOLS`)
-  if (!/^\d+$/.test(env[`${prefix}_START_BLOCK`] ?? '')) throw new Error(`Set ${prefix}_START_BLOCK explicitly; coverage cannot be assumed`)
-  const alchemy = new URL(rpc).hostname === `${network}.g.alchemy.com`
-  const batch = BigInt(env[`${prefix}_BATCH_BLOCKS`] ?? env.DEX_BATCH_BLOCKS ?? (alchemy ? '10' : '100')), interval = Number(env[`${prefix}_POLL_MS`] ?? env.DEX_POLL_MS ?? '10000')
-  if (batch < 1n || batch > 2000n || !Number.isInteger(interval) || interval < 1000 || interval > 300000) throw new Error('Invalid DEX batch or polling interval')
-  return { chain, rpc, ...(fallbackRpc && fallbackRpc !== rpc ? { fallbackRpc } : {}), pools, start: BigInt(env[`${prefix}_START_BLOCK`]!), batch, interval }
+  if (!pools.length || pools.length > 50 || pools.some(p => !/^0x[0-9a-f]{40}$/.test(p))) {
+    throw new DexConfigurationError(`${prefix}_POOLS`, 'Enter 1–50 comma-separated pool addresses')
+  }
+  const startBlock = env[`${prefix}_START_BLOCK`]?.trim() ?? ''
+  if (!/^\d+$/.test(startBlock)) {
+    throw new DexConfigurationError(`${prefix}_START_BLOCK`, 'Enter a decimal start block')
+  }
+  const parseRpc = (value: string, setting: string) => {
+    try {
+      const url = new URL(value)
+      if (['http:', 'https:'].includes(url.protocol)) return url
+    } catch { /* Report the setting name without its value. */ }
+    throw new DexConfigurationError(setting, 'Enter a full HTTP(S) RPC URL')
+  }
+  const rpcSetting = env[`${prefix}_RPC_URL`]?.trim() || apiKey ? `${prefix}_RPC_URL` : `${prefix}_FALLBACK_RPC_URL`
+  const alchemy = parseRpc(rpc, rpcSetting).hostname === `${network}.g.alchemy.com`
+  if (fallbackRpc) parseRpc(fallbackRpc, `${prefix}_FALLBACK_RPC_URL`)
+  const batchSetting = env[`${prefix}_BATCH_BLOCKS`] !== undefined ? `${prefix}_BATCH_BLOCKS` : 'DEX_BATCH_BLOCKS'
+  const pollSetting = env[`${prefix}_POLL_MS`] !== undefined ? `${prefix}_POLL_MS` : 'DEX_POLL_MS'
+  const batchSize = Number(env[batchSetting] ?? (alchemy ? '10' : '100'))
+  const interval = Number(env[pollSetting] ?? '10000')
+  if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 2000) {
+    throw new DexConfigurationError(batchSetting, 'Enter a batch size from 1 to 2000 blocks')
+  }
+  if (!Number.isInteger(interval) || interval < 1000 || interval > 300000) {
+    throw new DexConfigurationError(pollSetting, 'Enter a polling interval from 1000 to 300000 milliseconds')
+  }
+  return { chain, rpc, ...(fallbackRpc && fallbackRpc !== rpc ? { fallbackRpc } : {}), pools, start: BigInt(startBlock), batch: BigInt(batchSize), interval }
 }
 const chainIds = { base: '0x2105', ethereum: '0x1', bsc: '0x38' } as const
 class DexBatchValidationError extends Error {
@@ -27,9 +54,8 @@ class DexBatchValidationError extends Error {
 }
 
 function batchFailure(error: unknown) {
-  if (error instanceof DexRpcError) {
-    return { reason: `rpc_${error.reason}`, method: error.method, httpStatus: error.status, rpcCode: error.rpcCode }
-  }
+  const rpc = dexRpcFailure(error)
+  if (rpc) return rpc
   if (error instanceof DexBatchValidationError) return { reason: error.reason }
   if (error instanceof Error && 'severity' in error && 'code' in error &&
       typeof error.code === 'string' && /^[0-9A-Z]{5}$/.test(error.code)) {

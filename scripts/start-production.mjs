@@ -19,9 +19,9 @@ if (env.RENDER === 'true' && env.RENDER_EXTERNAL_URL) {
     env.MEMBERSHIP_RPC_URL ||= 'https://ethereum-sepolia.publicnode.com'
   }
   if (env.DEX_DATABASE_URL && (env.DEX_ETHEREUM_RPC_URL || env.ALCHEMY_API_KEY || env.DEX_ETHEREUM_FALLBACK_RPC_URL) &&
-      !env.DEX_ETHEREUM_POOLS?.trim() && !env.DEX_ETHEREUM_START_BLOCK?.trim()) {
+      !env.DEX_ETHEREUM_POOLS?.trim()) {
     env.DEX_ETHEREUM_POOLS = '0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc,0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640'
-    env.DEX_ETHEREUM_START_BLOCK = '26416294'
+    if (!env.DEX_ETHEREUM_START_BLOCK?.trim()) env.DEX_ETHEREUM_START_BLOCK = '26416294'
     env.DEX_ETHEREUM_BATCH_BLOCKS ??= env.DEX_BATCH_BLOCKS ?? '10'
   }
 }

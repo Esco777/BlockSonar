@@ -45,6 +45,14 @@ test('Alchemy key configures Base RPC server-side and explicit provider URLs tak
   assert.equal(dexConfig({ ALCHEMY_API_KEY: '  ' }), null)
   assert.equal(dexConfig({ ...env, ALCHEMY_API_KEY: 'a/b' }).rpc, 'https://base-mainnet.g.alchemy.com/v2/a%2Fb')
 })
+test('invalid worker settings identify the variable without disclosing its value', () => {
+  const env = { DEX_BSC_RPC_URL: 'secret-key-only', DEX_BSC_POOLS: pool }
+  assert.throws(() => dexConfig(env, 'bsc'), { setting: 'DEX_BSC_START_BLOCK' })
+  assert.throws(() => dexConfig({ ...env, DEX_BSC_START_BLOCK: '10' }, 'bsc'), {
+    setting: 'DEX_BSC_RPC_URL',
+    message: 'Enter a full HTTP(S) RPC URL',
+  })
+})
 test('API filters validate pagination, addresses, date ranges and numeric size', () => {
   const parse = query => parseDexFilters(new URL(`http://localhost/api/dex/swaps/base?${query}`))
   assert.equal(parse('limit=20').chain, 'base')
@@ -61,6 +69,16 @@ test('RPC errors do not leak provider credentials', async () => {
     reason: 'rpc',
     rpcCode: -32005,
   })
+})
+test('a rate-limited RPC pauses requests for subsequent pools', async () => {
+  let requests = 0
+  const rpc = new DexRpc('https://rpc.invalid', async () => {
+    requests++
+    return new Response(null, { status: 429, headers: { 'Retry-After': '30' } })
+  })
+  await assert.rejects(rpc.call('eth_chainId', []), { status: 429, method: 'eth_chainId' })
+  await assert.rejects(rpc.call('eth_call', []), { status: 429, method: 'eth_call' })
+  assert.equal(requests, 1)
 })
 test('historical migrations, atomic batches, restart, deduplication, retries and finalized reorg replay', async () => {
   const db = new PGlite(), store = new DexStore('postgresql://unused')

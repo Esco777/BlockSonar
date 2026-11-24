@@ -5,7 +5,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { timingSafeEqual } from 'node:crypto'
 import { dexChains } from '../src/lib/dex-intell.js'
 import { DexStore, type SwapFilters } from './dex-store.js'
-import { DexWorker, dexConfig } from './dex-worker.js'
+import { DexConfigurationError, DexWorker, dexConfig } from './dex-worker.js'
 
 export function parseDexFilters(url: URL): SwapFilters {
   const p = url.searchParams
@@ -59,9 +59,12 @@ export class DexApi {
           const config = dexConfig(this.env, chain)
           this.workerStatus[chain] = config ? 'started' : 'not configured'
           if (config) { const worker = new DexWorker(this.store!, config); this.workers.push(worker); worker.start() }
-        } catch {
+        } catch (error) {
           this.workerStatus[chain] = 'invalid configuration'
-          console.error(JSON.stringify({ service: 'dex', event: 'worker_configuration_failed', chain }))
+          const details = error instanceof DexConfigurationError
+            ? { setting: error.setting, message: error.message }
+            : {}
+          console.error(JSON.stringify({ service: 'dex', event: 'worker_configuration_failed', chain, ...details }))
         }
       }
       try {

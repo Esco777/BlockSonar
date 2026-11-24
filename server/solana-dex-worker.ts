@@ -1,5 +1,6 @@
 import { SolanaDexRpc, SOLANA_MAINNET_GENESIS, validSolanaKey, decodeSolanaSwaps } from './solana-dex.js'
 import { DexStore } from './dex-store.js'
+import { dexRpcFailure } from './dex-rpc.js'
 
 export type SolanaDexConfig = { rpc: string; fallbackRpc?: string; pools: string[]; start: number; pageSize: number; interval: number }
 export function solanaDexRpcUrl(env: NodeJS.ProcessEnv) {
@@ -88,9 +89,9 @@ export class SolanaDexWorker {
       for (const pool of this.config.pools) {
         if (this.stopped) break
         try { this.health.lastAttemptAt = Date.now(); if (await this.batch(pool)) catchingUp = true; this.health.lastSuccessAt = Date.now() }
-        catch {
+        catch (error) {
           this.health.lastErrorAt = Date.now()
-          console.error(JSON.stringify({ service: 'dex', event: 'solana_batch_failed', pool }))
+          console.error(JSON.stringify({ service: 'dex', event: 'solana_batch_failed', pool, ...dexRpcFailure(error) }))
           await this.store.db.query(`INSERT INTO backfill_jobs(chain,pool,start_block,status,attempts,last_error) VALUES('solana',$1,$2,'retrying',1,'Finalized Solana transaction/page unavailable, invalid logs, or database batch failed; cursor preserved') ON CONFLICT(chain,pool) DO UPDATE SET status='retrying',attempts=backfill_jobs.attempts+1,last_error=EXCLUDED.last_error,updated_at=now()`, [pool, this.config.start]).catch(() => {})
         }
       }
