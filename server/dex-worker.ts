@@ -1,5 +1,5 @@
 import { adapterForProtocol, decodeProtocolSwap, swapAbi, type DexChain } from './dex-adapters.js'
-import { DexRpc, hexBlock, type RawDexLog } from './dex-rpc.js'
+import { DexRpc, DexRpcError, hexBlock, type RawDexLog } from './dex-rpc.js'
 import { DexStore } from './dex-store.js'
 
 export type DexConfig = { chain?: DexChain; rpc: string; fallbackRpc?: string; pools: string[]; start: bigint; batch: bigint; interval: number }
@@ -20,6 +20,23 @@ export function dexConfig(env: NodeJS.ProcessEnv, chain: DexChain = 'base'): Dex
   return { chain, rpc, ...(fallbackRpc && fallbackRpc !== rpc ? { fallbackRpc } : {}), pools, start: BigInt(env[`${prefix}_START_BLOCK`]!), batch, interval }
 }
 const chainIds = { base: '0x2105', ethereum: '0x1', bsc: '0x38' } as const
+class DexBatchValidationError extends Error {
+  constructor(readonly reason: 'wrong_rpc_chain' | 'start_block_mismatch', message: string) {
+    super(message)
+  }
+}
+
+function batchFailure(error: unknown) {
+  if (error instanceof DexRpcError) {
+    return { reason: `rpc_${error.reason}`, method: error.method, httpStatus: error.status, rpcCode: error.rpcCode }
+  }
+  if (error instanceof DexBatchValidationError) return { reason: error.reason }
+  if (error instanceof Error && 'severity' in error && 'code' in error &&
+      typeof error.code === 'string' && /^[0-9A-Z]{5}$/.test(error.code)) {
+    return { reason: 'database_error', sqlState: error.code }
+  }
+  return { reason: 'pool_or_batch_validation_failed' }
+}
 export class DexWorker {
   readonly health: { lastAttemptAt: number | null; lastSuccessAt: number | null; lastErrorAt: number | null } = { lastAttemptAt: null, lastSuccessAt: null, lastErrorAt: null }
   get chainName() { return this.chain }
@@ -36,7 +53,7 @@ export class DexWorker {
   }
   async batch(pool: string) {
     const chainId = await this.rpc.call<string>('eth_chainId', [])
-    if (BigInt(chainId) !== BigInt(chainIds[this.chain])) throw new Error(`DEX RPC must serve ${this.chain} Mainnet`)
+    if (BigInt(chainId) !== BigInt(chainIds[this.chain])) throw new DexBatchValidationError('wrong_rpc_chain', `DEX RPC must serve ${this.chain} Mainnet`)
     const tokens = await this.rpc.verifyPool(pool, this.chain)
     const adapter = adapterForProtocol(tokens.protocol ?? `${this.chain}-uniswap-v3`)
     if (adapter.chain !== this.chain) throw new Error('Pool protocol belongs to another chain')
@@ -48,7 +65,7 @@ export class DexWorker {
       await client.query(`INSERT INTO dex_pools(chain,address,protocol,token0,token1) VALUES('${this.chain}',$1,'${protocol}',$2,$3) ON CONFLICT DO NOTHING`, [pool, tokens.token0, tokens.token1])
       await client.query(`INSERT INTO backfill_jobs(chain,pool,start_block,status) VALUES('${this.chain}',$1,$2,'pending') ON CONFLICT DO NOTHING`, [pool, this.config.start.toString()])
       const job = (await client.query(`SELECT * FROM backfill_jobs WHERE chain='${this.chain}' AND pool=$1`, [pool])).rows[0]
-      if (BigInt(job.start_block) !== this.config.start) throw new Error('Start block differs from durable job; use a separate database or a reviewed reset')
+      if (BigInt(job.start_block) !== this.config.start) throw new DexBatchValidationError('start_block_mismatch', 'Start block differs from durable job; use a separate database or a reviewed reset')
       const checkpoint = (await client.query(`SELECT * FROM indexer_checkpoints WHERE chain='${this.chain}' AND pool=$1`, [pool])).rows[0]
       if (checkpoint) {
         const canonical = await this.rpc.block(hexBlock(BigInt(checkpoint.block_number)))
@@ -100,10 +117,10 @@ export class DexWorker {
       for (const pool of this.config.pools) {
         if (this.stopped) break
         try { this.health.lastAttemptAt = Date.now(); if (await this.batch(pool)) catchingUp = true; this.health.lastSuccessAt = Date.now() }
-        catch {
+        catch (error) {
           this.health.lastErrorAt = Date.now()
           // Preserve checkpoint; failed range is retried on the next tick.
-          console.error(JSON.stringify({ service: 'dex', event: 'batch_failed', chain: this.chain, pool }))
+          console.error(JSON.stringify({ service: 'dex', event: 'batch_failed', chain: this.chain, pool, ...batchFailure(error) }))
           await this.store.db.query(`INSERT INTO backfill_jobs(chain,pool,start_block,status,attempts,last_error) VALUES('${this.chain}',$1,$2,'retrying',1,'RPC or database batch failed; checkpoint preserved') ON CONFLICT(chain,pool) DO UPDATE SET status='retrying',attempts=backfill_jobs.attempts+1,last_error=EXCLUDED.last_error,updated_at=now()`, [pool, this.config.start.toString()]).catch(() => {})
         }
       }

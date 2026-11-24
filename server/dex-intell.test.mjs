@@ -52,8 +52,15 @@ test('API filters validate pagination, addresses, date ranges and numeric size',
   assert.equal(parse(`token=${token0}&minUsd=12.25`).minUsd, '12.25')
 })
 test('RPC errors do not leak provider credentials', async () => {
-  const rpc = new DexRpc('https://secret.invalid/API_KEY', async () => new Response(JSON.stringify({ error: { message: 'secret provider error' } }), { status: 200 }))
-  await assert.rejects(rpc.call('eth_getLogs', []), /^Error: DEX RPC eth_getLogs failed$/)
+  const rpc = new DexRpc('https://secret.invalid/API_KEY', async () => Response.json({
+    error: { code: -32005, message: 'secret provider error' },
+  }))
+  await assert.rejects(rpc.call('eth_getLogs', []), {
+    message: 'DEX RPC eth_getLogs failed',
+    method: 'eth_getLogs',
+    reason: 'rpc',
+    rpcCode: -32005,
+  })
 })
 test('historical migrations, atomic batches, restart, deduplication, retries and finalized reorg replay', async () => {
   const db = new PGlite(), store = new DexStore('postgresql://unused')

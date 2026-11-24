@@ -5,6 +5,11 @@ export { poolAbi } from './dex-adapters.js'
 export const BASE_V3_FACTORY = '0x33128a8fc17869897dce68ed026d694621f6fdfd'
 export type RawDexLog = { address: string; topics: string[]; data: string; blockNumber: string; blockHash: string; transactionHash: string; logIndex: string; removed?: boolean }
 export const hexBlock = (block: bigint) => `0x${block.toString(16)}`
+export class DexRpcError extends Error {
+  constructor(readonly method: string, readonly reason: 'connection' | 'http' | 'response' | 'rpc', readonly status?: number, readonly rpcCode?: number) {
+    super(status === undefined ? `DEX RPC ${method} failed` : `DEX RPC HTTP ${status}`)
+  }
+}
 export function decodeSwap(log: RawDexLog, token0: string, token1: string) {
   return decodeProtocolSwap(adapterForProtocol('base-uniswap-v3'), log, token0, token1)!
 }
@@ -45,9 +50,13 @@ export class DexRpc {
     // Never log the provider URL: it may contain credentials.
     const response = await this.fetcher(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }), signal: AbortSignal.timeout(20000) })
-    if (!response.ok) throw new Error(`DEX RPC HTTP ${response.status}`)
-    const result = await response.json()
-    if (result.error || result.result == null) throw new Error(`DEX RPC ${method} failed`)
+      .catch(() => { throw new DexRpcError(method, 'connection') })
+    if (!response.ok) throw new DexRpcError(method, 'http', response.status)
+    const result = await response.json().catch(() => { throw new DexRpcError(method, 'response') })
+    if (result?.error || result?.result == null) {
+      const code = result?.error?.code
+      throw new DexRpcError(method, 'rpc', undefined, Number.isInteger(code) ? code : undefined)
+    }
     return result.result as T
   }
   async block(number: string) {
