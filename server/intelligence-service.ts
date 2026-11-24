@@ -63,12 +63,15 @@ export class IntelligenceService {
     return pools.map(pool => ({ ...pool, source, observedAt }))
   }
   async pools(network: DiscoverNetwork, page: number) {
-    await this.ready
     const enriched:Pool[] = (await this.discoveryPools(network,page)).map(({dexData, ...pool}) => pool)
+    const loaded = await this.ready.then(() => true, () => false)
+    if (!loaded) return enriched
     this.state.pools = deduplicatePools([...this.state.pools, ...enriched]).sort((a,b) => b.createdAt-a.createdAt).slice(0, 500)
     const retained = new Set(this.state.pools.map(p => assetKey(p.network,p.address)))
     for (const key of Object.keys(this.state.observations)) if (!retained.has(key)) delete this.state.observations[key]
-    await this.save()
+    await this.save().catch(() => {
+      console.warn('Discover could not save pool history')
+    })
     return enriched
   }
   async notificationPools() {

@@ -60,8 +60,17 @@ export async function fetchNewPools(network: DiscoverNetwork, page: number, sign
 }
 
 export async function fetchEnrichedNewPools(network: DiscoverNetwork, page: number, signal: AbortSignal): Promise<DiscoveredPool[]> {
-  const response = await fetch(`/api/discovery/pools?network=${network}&page=${page}`, { signal: AbortSignal.any([signal, AbortSignal.timeout(35000)]) })
-  if (!response.ok) throw new Error('New pool feed unavailable · retrying on the next refresh')
+  const response = await fetch(`/api/discovery/pools?network=${network}&page=${page}`, {
+    credentials: 'same-origin',
+    cache: 'no-store',
+    signal: AbortSignal.any([signal, AbortSignal.timeout(35000)]),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new Error(typeof body?.error === 'string'
+      ? body.error
+      : `New pool feed unavailable (HTTP ${response.status})`)
+  }
   const pools = await response.json()
   if (!Array.isArray(pools)) throw new Error('Invalid discovery response')
   return pools

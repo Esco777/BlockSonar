@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { parseNewPools, fetchNewPools } from './dist/src/lib/discover-markets.js'
+import { parseNewPools, fetchNewPools, fetchEnrichedNewPools } from './dist/src/lib/discover-markets.js'
 const pool = { attributes: { address: '0xpool', name: 'NEW / WETH', pool_created_at: '2026-11-09T12:00:00Z', base_token_price_usd: '0.0000000123', reserve_in_usd: '5000', fdv_usd: '25000', volume_usd: { h24: '500' }, price_change_percentage: { h24: '-2' }, transactions: { h24: { buys: 2, sells: 1 } } }, relationships: { base_token: { data: { id: 'token' } }, dex: { data: { id: 'dex' } } } }
 const payload = { data: [pool], included: [{ id: 'token', attributes: { name: 'New', symbol: 'NEW', address: '0xtoken', image_url: 'https://example.com/token.png' } }, { id: 'dex', attributes: { name: 'Uniswap' } }] }
 
@@ -27,6 +27,31 @@ test('missing fields remain unavailable, invalid timestamps are rejected, pools 
 
 test('identical addresses on different chains retain distinct pool identities', () => {
   assert.notEqual(parseNewPools(payload, 'eth')[0].id, parseNewPools(payload, 'bsc')[0].id)
+})
+
+test('Discover reports membership errors from its API', async (t) => {
+  t.mock.method(globalThis, 'fetch', async (_url, options) => {
+    assert.equal(options.credentials, 'same-origin')
+    return Response.json({ error: 'Sign in with a membership wallet' }, { status: 401 })
+  })
+  await assert.rejects(
+    fetchEnrichedNewPools('eth', 1, new AbortController().signal),
+    /Sign in with a membership wallet/,
+  )
+})
+
+test('Discover still returns live pools when its existing history cannot be read', async (t) => {
+  const { IntelligenceService } = await import('./dist/server/intelligence-service.js')
+  const { mkdtemp, rm, writeFile, readFile } = await import('node:fs/promises')
+  const directory = await mkdtemp('/tmp/blocksonar-discover-test-')
+  t.after(() => rm(directory, { recursive: true, force: true }))
+  const filename = directory + '/intelligence.json'
+  await writeFile(filename, 'damaged history')
+  t.mock.method(globalThis, 'fetch', async () => Response.json(payload))
+  const service = new IntelligenceService(filename, null)
+  const [row] = await service.pools('eth', 1)
+  assert.equal(row.symbol, 'NEW')
+  assert.equal(await readFile(filename, 'utf8'), 'damaged history')
 })
 
 test('requests the selected chain and page and exposes rate-limit failures', async () => {
